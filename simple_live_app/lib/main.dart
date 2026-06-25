@@ -244,6 +244,11 @@ class MyApp extends StatelessWidget {
                             }
                           }
                         }
+                        // 空格键暂停/播放
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.space) {
+                          EventBus.instance.emit(EventBus.kSpacePressed, 0);
+                        }
                       },
                       child: child!,
                     ),

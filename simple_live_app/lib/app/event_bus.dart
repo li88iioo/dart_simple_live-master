@@ -10,6 +10,9 @@ class EventBus {
 
   /// 用户按了Esc
   static const String kEscapePressed = "EscapePressed";
+
+  /// 用户按了空格
+  static const String kSpacePressed = "SpacePressed";
   static EventBus? _instance;
 
   static EventBus get instance {

@@ -70,6 +70,27 @@ Widget buildFullControls(
             ),
           ),
         ),
+        // 暂停状态指示图标
+        Obx(
+          () => Visibility(
+            visible: controller.playerPausedState.value,
+            child: Center(
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 40,
+                ),
+              ),
+            ),
+          ),
+        ),
         Positioned.fill(
           child: GestureDetector(
             onTap: controller.onTap,
@@ -242,6 +263,19 @@ Widget buildFullControls(
                     icon: const Icon(
                       Remix.refresh_line,
                       color: Colors.white,
+                    ),
+                  ),
+                  Obx(
+                    () => IconButton(
+                      onPressed: () {
+                        controller.togglePlayPause();
+                      },
+                      icon: Icon(
+                        controller.playerPausedState.value
+                            ? Icons.play_arrow_rounded
+                            : Icons.pause_rounded,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   Offstage(
@@ -440,6 +474,27 @@ Widget buildControls(
           ),
         ),
       ),
+      // 暂停状态指示图标
+      Obx(
+        () => Visibility(
+          visible: controller.playerPausedState.value,
+          child: Center(
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(32),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          ),
+        ),
+      ),
       Positioned.fill(
         child: GestureDetector(
           onTap: controller.onTap,
@@ -484,6 +539,19 @@ Widget buildControls(
                   icon: const Icon(
                     Remix.refresh_line,
                     color: Colors.white,
+                  ),
+                ),
+                Obx(
+                  () => IconButton(
+                    onPressed: () {
+                      controller.togglePlayPause();
+                    },
+                    icon: Icon(
+                      controller.playerPausedState.value
+                          ? Icons.play_arrow_rounded
+                          : Icons.pause_rounded,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
                 Offstage(

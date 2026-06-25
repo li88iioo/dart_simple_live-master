@@ -148,6 +148,9 @@ mixin PlayerStateMixin on PlayerMixin {
   /// 是否显示OSD统计信息
   RxBool showOSDStats = false.obs;
 
+  /// 是否处于暂停状态
+  RxBool playerPausedState = false.obs;
+
   /// 提示底部Tip文本
   RxString bottomTipText = "".obs;
 
@@ -712,6 +715,7 @@ class PlayerController extends BaseController
   StreamSubscription? _logSubscription;
   StreamSubscription? _playingSubscription;
   StreamSubscription? _escSubscription;
+  StreamSubscription? _spaceSubscription;
 
   void initStream() {
     _errorSubscription = player.stream.error.listen((event) {
@@ -726,9 +730,15 @@ class PlayerController extends BaseController
     });
 
     _playingSubscription = player.stream.playing.listen((event) {
+      playerPausedState.value = !event;
       if (event) {
         WakelockPlus.enable();
+        danmakuController?.resume();
         Log.d("Playing");
+      } else {
+        WakelockPlus.disable();
+        danmakuController?.pause();
+        Log.d("Paused");
       }
     });
 
@@ -764,6 +774,10 @@ class PlayerController extends BaseController
         EventBus.instance.listen(EventBus.kEscapePressed, (event) {
       exitFull();
     });
+    _spaceSubscription =
+        EventBus.instance.listen(EventBus.kSpacePressed, (event) {
+      togglePlayPause();
+    });
   }
 
   void disposeStream() {
@@ -775,6 +789,7 @@ class PlayerController extends BaseController
     _pipSubscription?.cancel();
     _playingSubscription?.cancel();
     _escSubscription?.cancel();
+    _spaceSubscription?.cancel();
   }
 
   void mediaEnd() {
@@ -794,6 +809,11 @@ class PlayerController extends BaseController
         'stats/display-page-1-toggle',
       ]);
     }
+  }
+
+  /// 切换播放/暂停
+  void togglePlayPause() {
+    player.playOrPause();
   }
 
   void showDebugInfo() {
