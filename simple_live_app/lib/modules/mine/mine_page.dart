@@ -21,7 +21,7 @@ class MinePage extends StatelessWidget {
     Color bgColor = baseColor.withOpacity(isDark ? 0.20 : 0.12);
     
     if (baseColor == const Color(0xFF24292E)) { // GitHub color
-      iconColor = isDark ? Colors.white80 : const Color(0xFF24292E);
+      iconColor = isDark ? Colors.white70 : const Color(0xFF24292E);
       bgColor = isDark ? Colors.white.withOpacity(0.12) : const Color(0xFF24292E).withOpacity(0.1);
     } else if (baseColor == Colors.blueGrey) {
       iconColor = isDark ? const Color(0xFFB0BEC5) : Colors.blueGrey.shade700;
