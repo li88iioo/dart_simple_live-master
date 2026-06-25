@@ -145,7 +145,6 @@ flutter build apk --release --split-per-abi
 - `simple_live_core` 项目核心库，实现获取各个网站的信息及弹幕。
 - `simple_live_console` 基于simple_live_core的控制台程序。
 - `simple_live_app` 基于核心库实现的Flutter APP客户端。
-- `simple_live_tv_app` 基于核心库实现的Flutter Android TV客户端。
 
 ### 技术栈
 
