@@ -38,9 +38,15 @@ jobs:
         if: env.HAS_KEYSTORE == 'true'
         env:
           HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          FIREBASE_JSON: ${{ secrets.FIREBASE_JSON }}
+          FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
         run: |
-          echo "${{ secrets.FIREBASE_JSON }}" | base64 --decode > simple_live_app/android/app/google-services.json
-          echo "${{ secrets.FIREBASE_OPTIONS_DART }}" | base64 --decode > simple_live_app/lib/firebase_options.dart
+          if [ -n "$FIREBASE_JSON" ]; then
+            echo "$FIREBASE_JSON" | base64 --decode > simple_live_app/android/app/google-services.json
+          fi
+          if [ -n "$FIREBASE_OPTIONS_DART" ]; then
+            echo "$FIREBASE_OPTIONS_DART" | base64 --decode > simple_live_app/lib/firebase_options.dart
+          fi
           echo "storeFile=${{ steps.android_keystore.outputs.filePath }}" > simple_live_app/android/key.properties
           echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> simple_live_app/android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> simple_live_app/android/key.properties
