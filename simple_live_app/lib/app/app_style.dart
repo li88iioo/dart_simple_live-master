@@ -35,7 +35,7 @@ class AppStyle {
           systemNavigationBarColor: Colors.transparent,
         ),
       ),
-      tabBarTheme: TabBarTheme(
+      tabBarTheme: TabBarThemeData(
         labelColor: AppColors.lightColorScheme.primary,
         unselectedLabelColor: Colors.grey.shade600,
         indicatorSize: TabBarIndicatorSize.label,
@@ -67,7 +67,7 @@ class AppStyle {
           systemNavigationBarColor: Colors.transparent,
         ),
       ),
-      tabBarTheme: TabBarTheme(
+      tabBarTheme: TabBarThemeData(
         labelColor: AppColors.darkColorScheme.primary,
         unselectedLabelColor: Colors.grey.shade400,
         indicatorSize: TabBarIndicatorSize.label,
