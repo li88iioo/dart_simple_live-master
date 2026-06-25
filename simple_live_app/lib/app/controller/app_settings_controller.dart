@@ -1,0 +1,676 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:get/get.dart';
+import 'package:simple_live_app/app/constant.dart';
+import 'package:simple_live_app/app/log.dart';
+import 'package:simple_live_app/app/sites.dart';
+import 'package:simple_live_app/models/db/follow_snapshot.dart';
+import 'package:simple_live_app/services/local_storage_service.dart';
+
+class AppSettingsController extends GetxController {
+  static AppSettingsController get instance =>
+      Get.find<AppSettingsController>();
+
+  /// 缩放模式
+  var scaleMode = 0.obs;
+
+  var themeMode = 0.obs;
+
+  var firstRun = false;
+
+  var dbVer = 0;
+
+  @override
+  void onInit() {
+    themeMode.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kThemeMode, 0);
+    firstRun = LocalStorageService.instance
+        .getValue(LocalStorageService.kFirstRun, true);
+    danmuSize.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuSize, 16.0);
+    danmuOpacity.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuOpacity, 1.0);
+    danmuArea.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuArea, 0.8);
+    danmuSpeed.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuSpeed, 10.0);
+    danmuEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuEnable, true);
+    danmakuMaskEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmakuMaskEnable, false);
+    danmuStrokeWidth.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuStrokeWidth, 2.0);
+    danmuTopMargin.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuTopMargin, 0.0);
+    danmuBottomMargin.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuBottomMargin, 0.0);
+    danmuFontWeight.value = LocalStorageService.instance.getValue(
+        LocalStorageService.kDanmuFontWeight, FontWeight.normal.index);
+
+    hardwareDecode.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kHardwareDecode, true);
+    chatTextSize.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kChatTextSize, 14.0);
+
+    chatTextGap.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kChatTextGap, 4.0);
+
+    chatBubbleStyle.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kChatBubbleStyle,
+      false,
+    );
+
+    qualityLevel.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kQualityLevel, 2);
+    qualityLevelCellular.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kQualityLevelCellular, 1);
+
+    autoExitEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kAutoExitEnable, false);
+
+    autoExitDuration.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kAutoExitDuration, 60);
+
+    roomAutoExitDuration.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kRoomAutoExitDuration, 60);
+
+    playerCompatMode.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kPlayerCompatMode, false);
+
+    playerAutoPause.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kPlayerAutoPause, false);
+
+    playerForceHttps.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kPlayerForceHttps, false);
+
+    douyinHlsFirst.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDouyinHlsFirst, false);
+
+    autoFullScreen.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kAutoFullScreen, false);
+
+    // ignore: invalid_use_of_protected_member
+    shieldList.value = LocalStorageService.instance.shieldBox.values.toSet();
+
+    scaleMode.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kPlayerScaleMode,
+      0,
+    );
+
+    playerVolume.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kPlayerVolume,
+      100.0,
+    );
+    pipHideDanmu.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kPIPHideDanmu, true);
+
+    bilibiliLoginTip.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kBilibiliLoginTip, true);
+
+    playerBufferSize.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kPlayerBufferSize, 32);
+
+    logEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kLogEnable, false);
+    if (logEnable.value) {
+      Log.initWriter();
+    }
+
+    firebaseEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kFirebaseEnable, true);
+
+    customPlayerOutput.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kCustomPlayerOutput, false);
+
+    videoOutputDriver.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kVideoOutputDriver,
+      Platform.isAndroid ? "mediacodec_embed" : "libmpv",
+    );
+
+    audioOutputDriver.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kAudioOutputDriver,
+      Platform.isAndroid
+          ? "audiotrack"
+          : Platform.isLinux
+              ? "pulse"
+              : Platform.isWindows
+                  ? "wasapi"
+                  : Platform.isIOS
+                      ? "audiounit"
+                      : Platform.isMacOS
+                          ? "coreaudio"
+                          : "sdl",
+    );
+
+    videoHardwareDecoder.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kVideoHardwareDecoder,
+      Platform.isAndroid ? "mediacodec" : "auto",
+    );
+
+    videoDoubleBuffering.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kVideoDoubleBuffering,
+      false,
+    );
+
+    autoUpdateFollowEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kAutoUpdateFollowEnable, true);
+
+    autoUpdateFollowDuration.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kUpdateFollowDuration, 10);
+
+    updateFollowThreadCount.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kUpdateFollowThreadCount, 4);
+
+    followSnapshotEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kFollowSnapshotEnable, false);
+
+    // danmaku-去重参数
+    danmuFrequencyControl.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuFrequencyControl, false);
+
+    danmuMaxFrequency.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuMaxFrequency, 3);
+
+    danmuTextNormalization.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuTextNormalization, true);
+
+    danmuWindowMs.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuWindowMs, 15);
+    dbVer = LocalStorageService.instance
+        .getValue(LocalStorageService.kHiveDbVer, 10708);
+
+    followSortMethod.value = SortMethodStore.fromStore(
+        LocalStorageService.instance.getValue(
+            LocalStorageService.kFollowSortMethod,
+            SortMethod.watchDuration.storeValue));
+
+    followStyleNotGrid.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kFollowStyleNotGrid, true);
+
+    hideOfflineFollow.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kHideOfflineFollow, false);
+
+    hideRemoveFollowButton.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kHideRemoveFollow, true);
+
+    followSnapshot = LocalStorageService.instance
+        .getNullValue(LocalStorageService.kFollowSnapshot, null);
+
+    initSiteSort();
+    initHomeSort();
+
+    super.onInit();
+  }
+
+  void initSiteSort() {
+    var sort = LocalStorageService.instance
+        .getValue(
+          LocalStorageService.kSiteSort,
+          Sites.allSites.keys.join(","),
+        )
+        .split(",");
+    //如果数量与allSites的数量不一致，将缺失的添加上
+    if (sort.length != Sites.allSites.length) {
+      var keys = Sites.allSites.keys.toList();
+      for (var i = 0; i < keys.length; i++) {
+        if (!sort.contains(keys[i])) {
+          sort.add(keys[i]);
+        }
+      }
+    }
+
+    siteSort.value = sort;
+  }
+
+  void initHomeSort() {
+    var sort = LocalStorageService.instance
+        .getValue(
+          LocalStorageService.kHomeSort,
+          Constant.allHomePages.keys.join(","),
+        )
+        .split(",");
+    //如果数量与allSites的数量不一致，将缺失的添加上
+    if (sort.length != Constant.allHomePages.length) {
+      var keys = Constant.allHomePages.keys.toList();
+      for (var i = 0; i < keys.length; i++) {
+        if (!sort.contains(keys[i])) {
+          sort.add(keys[i]);
+        }
+      }
+    }
+
+    homeSort.value = sort;
+  }
+
+  void setNoFirstRun() {
+    LocalStorageService.instance.setValue(LocalStorageService.kFirstRun, false);
+  }
+
+  var hardwareDecode = true.obs;
+
+  void setHardwareDecode(bool e) {
+    hardwareDecode.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kHardwareDecode, e);
+  }
+
+  var chatTextSize = 14.0.obs;
+
+  void setChatTextSize(double e) {
+    chatTextSize.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kChatTextSize, e);
+  }
+
+  var chatTextGap = 4.0.obs;
+
+  void setChatTextGap(double e) {
+    chatTextGap.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kChatTextGap, e);
+  }
+
+  var chatBubbleStyle = false.obs;
+
+  void setChatBubbleStyle(bool e) {
+    chatBubbleStyle.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kChatBubbleStyle, e);
+  }
+
+  var danmuSize = 16.0.obs;
+
+  void setDanmuSize(double e) {
+    danmuSize.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kDanmuSize, e);
+  }
+
+  var danmuSpeed = 10.0.obs;
+
+  void setDanmuSpeed(double e) {
+    danmuSpeed.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kDanmuSpeed, e);
+  }
+
+  var danmuArea = 0.8.obs;
+
+  void setDanmuArea(double e) {
+    danmuArea.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kDanmuArea, e);
+  }
+
+  var danmuOpacity = 1.0.obs;
+
+  void setDanmuOpacity(double e) {
+    danmuOpacity.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kDanmuOpacity, e);
+  }
+
+  var danmuEnable = true.obs;
+
+  void setDanmuEnable(bool e) {
+    danmuEnable.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kDanmuEnable, e);
+  }
+
+  var danmakuMaskEnable = false.obs;
+
+  void setDanmakuMaskEnable(bool e) {
+    danmakuMaskEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmakuMaskEnable, e);
+  }
+
+  var danmuStrokeWidth = 2.0.obs;
+
+  void setDanmuStrokeWidth(double e) {
+    danmuStrokeWidth.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuStrokeWidth, e);
+  }
+
+  var danmuFontWeight = FontWeight.normal.index.obs;
+
+  void setDanmuFontWeight(int e) {
+    danmuFontWeight.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuFontWeight, e);
+  }
+
+  var qualityLevel = 1.obs;
+
+  void setQualityLevel(int level) {
+    qualityLevel.value = level;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kQualityLevel, level);
+  }
+
+  var qualityLevelCellular = 1.obs;
+
+  void setQualityLevelCellular(int level) {
+    qualityLevelCellular.value = level;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kQualityLevelCellular, level);
+  }
+
+  var autoExitEnable = false.obs;
+
+  void setAutoExitEnable(bool e) {
+    autoExitEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kAutoExitEnable, e);
+  }
+
+  var autoExitDuration = 60.obs;
+
+  void setAutoExitDuration(int e) {
+    autoExitDuration.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kAutoExitDuration, e);
+  }
+
+  var roomAutoExitDuration = 60.obs;
+
+  void setRoomAutoExitDuration(int e) {
+    roomAutoExitDuration.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kRoomAutoExitDuration, e);
+  }
+
+  var playerCompatMode = false.obs;
+
+  void setPlayerCompatMode(bool e) {
+    playerCompatMode.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kPlayerCompatMode, e);
+  }
+
+  var playerBufferSize = 32.obs;
+
+  void setPlayerBufferSize(int e) {
+    playerBufferSize.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kPlayerBufferSize, e);
+  }
+
+  var playerAutoPause = false.obs;
+
+  void setPlayerAutoPause(bool e) {
+    playerAutoPause.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kPlayerAutoPause, e);
+  }
+
+  var autoFullScreen = false.obs;
+
+  void setAutoFullScreen(bool e) {
+    autoFullScreen.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kAutoFullScreen, e);
+  }
+
+  RxSet<String> shieldList = <String>{}.obs;
+
+  void addShieldList(String e) {
+    shieldList.add(e);
+    LocalStorageService.instance.shieldBox.put(e, e);
+  }
+
+  void removeShieldList(String e) {
+    shieldList.remove(e);
+    LocalStorageService.instance.shieldBox.delete(e);
+  }
+
+  Future clearShieldList() async {
+    shieldList.clear();
+    await LocalStorageService.instance.shieldBox.clear();
+  }
+
+  void setScaleMode(int value) {
+    scaleMode.value = value;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kPlayerScaleMode,
+      value,
+    );
+  }
+
+  RxList<String> siteSort = RxList<String>();
+
+  void setSiteSort(List<String> e) {
+    siteSort.value = e;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kSiteSort,
+      siteSort.join(","),
+    );
+  }
+
+  RxList<String> homeSort = RxList<String>();
+
+  void setHomeSort(List<String> e) {
+    homeSort.value = e;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kHomeSort,
+      homeSort.join(","),
+    );
+  }
+
+  Rx<double> playerVolume = 100.0.obs;
+
+  void setPlayerVolume(double value) {
+    playerVolume.value = value;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kPlayerVolume,
+      value,
+    );
+  }
+
+  var pipHideDanmu = true.obs;
+
+  void setPIPHideDanmu(bool e) {
+    pipHideDanmu.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kPIPHideDanmu, e);
+  }
+
+  var danmuTopMargin = 0.0.obs;
+
+  void setDanmuTopMargin(double e) {
+    danmuTopMargin.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuTopMargin, e);
+  }
+
+  var danmuBottomMargin = 0.0.obs;
+
+  void setDanmuBottomMargin(double e) {
+    danmuBottomMargin.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuBottomMargin, e);
+  }
+
+  /// 弹幕去重参数设置
+  var danmuTextNormalization = true.obs;
+
+  void setDanmuTextNormalization(bool e) {
+    danmuTextNormalization.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuTextNormalization, e);
+  }
+
+  var danmuMaxFrequency = 3.obs;
+
+  void setDanmuMaxFrequency(int e) {
+    danmuMaxFrequency.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuMaxFrequency, e);
+  }
+
+  var danmuFrequencyControl = true.obs;
+
+  void setDanmuFrequencyControl(bool e) {
+    danmuFrequencyControl.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuFrequencyControl, e);
+  }
+
+  var danmuWindowMs = 15.obs;
+
+  void setDanmuWindowMs(int e) {
+    danmuWindowMs.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuWindowMs, e);
+  }
+
+  var bilibiliLoginTip = true.obs;
+
+  void setBiliBiliLoginTip(bool e) {
+    bilibiliLoginTip.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kBilibiliLoginTip, e);
+  }
+
+  var logEnable = false.obs;
+
+  void setLogEnable(bool e) {
+    logEnable.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kLogEnable, e);
+  }
+
+  var firebaseEnable = true.obs;
+
+  void setFirebaseEnable(bool e) {
+    firebaseEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kFirebaseEnable, e);
+  }
+
+  var customPlayerOutput = false.obs;
+
+  void setCustomPlayerOutput(bool e) {
+    customPlayerOutput.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kCustomPlayerOutput, e);
+  }
+
+  var videoOutputDriver = "".obs;
+
+  void setVideoOutputDriver(String e) {
+    videoOutputDriver.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kVideoOutputDriver, e);
+  }
+
+  var audioOutputDriver = "".obs;
+
+  void setAudioOutputDriver(String e) {
+    audioOutputDriver.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kAudioOutputDriver, e);
+  }
+
+  var videoHardwareDecoder = "".obs;
+
+  void setVideoHardwareDecoder(String e) {
+    videoHardwareDecoder.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kVideoHardwareDecoder, e);
+  }
+
+  var videoDoubleBuffering = false.obs;
+
+  void setVideoDoubleBuffering(bool e) {
+    videoDoubleBuffering.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kVideoDoubleBuffering, e);
+  }
+
+  var autoUpdateFollowEnable = false.obs;
+
+  void setAutoUpdateFollowEnable(bool e) {
+    autoUpdateFollowEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kAutoUpdateFollowEnable, e);
+  }
+
+  var autoUpdateFollowDuration = 10.obs;
+
+  void setAutoUpdateFollowDuration(int e) {
+    autoUpdateFollowDuration.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kUpdateFollowDuration, e);
+  }
+
+  var updateFollowThreadCount = 4.obs;
+
+  void setUpdateFollowThreadCount(int e) {
+    updateFollowThreadCount.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kUpdateFollowThreadCount, e);
+  }
+
+  var followSnapshotEnable = false.obs;
+
+  void setFollowSnapshotEnable(bool e) {
+    followSnapshotEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kFollowSnapshotEnable, e);
+  }
+
+  var playerForceHttps = false.obs;
+
+  void setPlayerForceHttps(bool e) {
+    playerForceHttps.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kPlayerForceHttps, e);
+  }
+
+  var douyinHlsFirst = false.obs;
+
+  void setDouyinHlsFirst(bool e) {
+    douyinHlsFirst.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDouyinHlsFirst, e);
+  }
+
+  var followSortMethod = SortMethod.watchDuration.obs;
+
+  void setFollowSortMethod(SortMethod e) {
+    followSortMethod.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kFollowSortMethod, e.storeValue);
+  }
+
+  // 关注样式是否卡片化
+  var followStyleNotGrid = true.obs;
+
+  void setFollowStyleNotGrid(bool e) {
+    followStyleNotGrid.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kFollowStyleNotGrid, e);
+  }
+
+  // 隐藏不在线的关注
+  var hideOfflineFollow = false.obs;
+
+  void setHideOfflineFollow(bool e) {
+    hideOfflineFollow.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kHideOfflineFollow, e);
+  }
+
+  // 隐藏隐藏快速取关按钮
+  var hideRemoveFollowButton = true.obs;
+
+  void setHideRemoveFollowButton(bool e) {
+    hideRemoveFollowButton.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kHideRemoveFollow, e);
+  }
+
+  /// 保存关注列表快照
+  FollowSnapshot? followSnapshot;
+
+  Future setFollowSnapshot(FollowSnapshot followSnapshot) {
+    return LocalStorageService.instance
+        .setValue(LocalStorageService.kFollowSnapshot, followSnapshot);
+  }
+}
