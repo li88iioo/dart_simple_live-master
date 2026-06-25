@@ -70,27 +70,6 @@ Widget buildFullControls(
             ),
           ),
         ),
-        // 暂停状态指示图标
-        Obx(
-          () => Visibility(
-            visible: controller.playerPausedState.value,
-            child: Center(
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(32),
-                ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-            ),
-          ),
-        ),
         Positioned.fill(
           child: GestureDetector(
             onTap: controller.onTap,
@@ -112,16 +91,40 @@ Widget buildFullControls(
                 width: double.infinity,
                 height: double.infinity,
                 color: Colors.transparent,
-                // child: Visibility(
-                //   //拖拽区域
-                //   visible: controller.smallWindowState.value,
-                //   child: DragToMoveArea(
-                //       child: Container(
                 //     width: double.infinity,
                 //     height: double.infinity,
                 //     color: Colors.transparent,
                 //   )),
                 // ),
+              ),
+            ),
+          ),
+        ),
+        // 暂停状态指示图标 (放于最上层，使其可以点击直接播放)
+        Obx(
+          () => Visibility(
+            visible: controller.playerPausedState.value,
+            child: Center(
+              child: ClipOval(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: controller.togglePlayPause,
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: const BoxDecoration(
+                        color: Colors.black45,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -474,27 +477,6 @@ Widget buildControls(
           ),
         ),
       ),
-      // 暂停状态指示图标
-      Obx(
-        () => Visibility(
-          visible: controller.playerPausedState.value,
-          child: Center(
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.black45,
-                borderRadius: BorderRadius.circular(32),
-              ),
-              child: const Icon(
-                Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: 40,
-              ),
-            ),
-          ),
-        ),
-      ),
       Positioned.fill(
         child: GestureDetector(
           onTap: controller.onTap,
@@ -509,6 +491,35 @@ Widget buildControls(
               width: double.infinity,
               height: double.infinity,
               color: Colors.transparent,
+            ),
+          ),
+        ),
+      ),
+      // 暂停状态指示图标 (放于最上层，使其可以点击直接播放)
+      Obx(
+        () => Visibility(
+          visible: controller.playerPausedState.value,
+          child: Center(
+            child: ClipOval(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: controller.togglePlayPause,
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: const BoxDecoration(
+                      color: Colors.black45,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 40,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),

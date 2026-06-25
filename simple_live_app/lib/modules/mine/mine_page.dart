@@ -13,19 +13,52 @@ import 'package:url_launcher/url_launcher_string.dart';
 class MinePage extends StatelessWidget {
   const MinePage({super.key});
 
-  Widget _buildLeadingIcon(IconData icon, Color backgroundColor) {
+  Widget _buildLeadingIcon(BuildContext context, IconData icon, Color baseColor) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Premium translucent pastel style (translucent background with matching colored icon)
+    Color iconColor = baseColor;
+    Color bgColor = baseColor.withOpacity(isDark ? 0.20 : 0.12);
+    
+    if (baseColor == const Color(0xFF24292E)) { // GitHub color
+      iconColor = isDark ? Colors.white80 : const Color(0xFF24292E);
+      bgColor = isDark ? Colors.white.withOpacity(0.12) : const Color(0xFF24292E).withOpacity(0.1);
+    } else if (baseColor == Colors.blueGrey) {
+      iconColor = isDark ? const Color(0xFFB0BEC5) : Colors.blueGrey.shade700;
+    } else {
+      if (isDark) {
+        // Pastel adaptation in dark mode
+        if (baseColor == Colors.blue) iconColor = const Color(0xFF64B5F6);
+        else if (baseColor == Colors.green) iconColor = const Color(0xFF81C784);
+        else if (baseColor == Colors.teal) iconColor = const Color(0xFF4DB6AC);
+        else if (baseColor == Colors.orange) iconColor = const Color(0xFFFFB74D);
+        else if (baseColor == Colors.indigo) iconColor = const Color(0xFF9FA8DA);
+        else if (baseColor == Colors.pink) iconColor = const Color(0xFFF48FB1);
+        else if (baseColor == Colors.purple) iconColor = const Color(0xFFCE93D8);
+        else if (baseColor == Colors.cyan) iconColor = const Color(0xFF80DEEA);
+        else if (baseColor == Colors.amber.shade700) iconColor = const Color(0xFFFFD54F);
+        else if (baseColor == Colors.redAccent) iconColor = const Color(0xFFEF9A9A);
+        else if (baseColor == Colors.redAccent.shade100) iconColor = const Color(0xFFFF8A80);
+      } else {
+        // Solid accent adaptation in light mode
+        if (baseColor == Colors.green) iconColor = const Color(0xFF2E7D32);
+        else if (baseColor == Colors.orange) iconColor = const Color(0xFFE65100);
+        else if (baseColor == Colors.amber.shade700) iconColor = const Color(0xFFD84315);
+      }
+    }
+
     return Container(
       width: 28,
       height: 28,
       decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(7),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Center(
         child: Icon(
           icon,
-          color: Colors.white,
-          size: 16,
+          color: iconColor,
+          size: 15,
         ),
       ),
     );
@@ -104,7 +137,7 @@ class MinePage extends StatelessWidget {
               context,
               children: [
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.history_line, Colors.blue),
+                  leading: _buildLeadingIcon(context, Remix.history_line, Colors.blue),
                   title: const Text("观看记录", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -115,7 +148,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.account_circle_line, Colors.green),
+                  leading: _buildLeadingIcon(context, Remix.account_circle_line, Colors.green),
                   title: const Text("账号管理", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -126,7 +159,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Icons.devices, Colors.teal),
+                  leading: _buildLeadingIcon(context, Icons.devices, Colors.teal),
                   title: const Text("数据同步", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -137,7 +170,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.link, Colors.orange),
+                  leading: _buildLeadingIcon(context, Remix.link, Colors.orange),
                   title: const Text("链接解析", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -156,7 +189,7 @@ class MinePage extends StatelessWidget {
               context,
               children: [
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.moon_line, Colors.indigo),
+                  leading: _buildLeadingIcon(context, Remix.moon_line, Colors.indigo),
                   title: const Text("外观设置", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -167,7 +200,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.home_2_line, Colors.pink),
+                  leading: _buildLeadingIcon(context, Remix.home_2_line, Colors.pink),
                   title: const Text("主页设置", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -178,7 +211,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.play_circle_line, Colors.purple),
+                  leading: _buildLeadingIcon(context, Remix.play_circle_line, Colors.purple),
                   title: const Text("直播设置", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -189,7 +222,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.text, Colors.cyan),
+                  leading: _buildLeadingIcon(context, Remix.text, Colors.cyan),
                   title: const Text("弹幕设置", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -200,7 +233,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.timer_2_line, Colors.amber.shade700),
+                  leading: _buildLeadingIcon(context, Remix.timer_2_line, Colors.amber.shade700),
                   title: const Text("定时关闭", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -211,7 +244,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.apps_line, Colors.blueGrey),
+                  leading: _buildLeadingIcon(context, Remix.apps_line, Colors.blueGrey),
                   title: const Text("其他设置", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -223,7 +256,7 @@ class MinePage extends StatelessWidget {
                 ),
                 if (kDebugMode)
                   ListTile(
-                    leading: _buildLeadingIcon(Remix.bug_line, Colors.redAccent),
+                    leading: _buildLeadingIcon(context, Remix.bug_line, Colors.redAccent),
                     title: const Text("测试", style: TextStyle(fontSize: 14)),
                     trailing: const Icon(
                       Icons.chevron_right,
@@ -245,7 +278,7 @@ class MinePage extends StatelessWidget {
               context,
               children: [
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.error_warning_line, Colors.redAccent.shade100),
+                  leading: _buildLeadingIcon(context, Remix.error_warning_line, Colors.redAccent.shade100),
                   title: const Text("免责声明", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -254,7 +287,7 @@ class MinePage extends StatelessWidget {
                   onTap: Utils.showStatement,
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.github_line, const Color(0xFF24292E)),
+                  leading: _buildLeadingIcon(context, Remix.github_line, const Color(0xFF24292E)),
                   title: const Text("开源主页", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
@@ -268,7 +301,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: _buildLeadingIcon(Remix.upload_2_line, Colors.redAccent),
+                  leading: _buildLeadingIcon(context, Remix.upload_2_line, Colors.redAccent),
                   title: const Text("检查更新", style: TextStyle(fontSize: 14)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
