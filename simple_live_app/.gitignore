@@ -55,3 +55,9 @@ app.*.map.json
 
 # firebase
 firebase.json
+
+# Keystores and passwords
+android/key.properties
+*.jks
+*.keystore
+keystore_base64.txt

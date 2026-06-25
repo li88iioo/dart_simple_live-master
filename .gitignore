@@ -10,3 +10,7 @@ build/
 dev-tool.ps1
 *.py
 simple_live_app/iconfont.yaml
+
+# Keystore files
+my-release-key.jks
+keystore_base64.txt
