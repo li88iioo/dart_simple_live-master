@@ -14,25 +14,35 @@ class FilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return InkWell(
       borderRadius: AppStyle.radius24,
       onTap: onTap,
-      child: Container(
-        padding: AppStyle.edgeInsetsH12.copyWith(top: 4, bottom: 4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          border: Border.all(
-              color: selected
-                  ? Theme.of(context).textTheme.bodyMedium!.color!
-                  : Colors.grey),
+          color: selected
+              ? primaryColor.withOpacity(0.12)
+              : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04)),
           borderRadius: AppStyle.radius24,
+          border: Border.all(
+            color: selected
+                ? primaryColor.withOpacity(0.15)
+                : Colors.transparent,
+            width: 0.5,
+          ),
         ),
         child: Text(
           text,
-          style: selected
-              ? Theme.of(context).textTheme.bodyMedium
-              : Theme.of(context).textTheme.bodyMedium!.copyWith(
-                    color: Colors.grey,
-                  ),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+            color: selected
+                ? primaryColor
+                : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+          ),
         ),
       ),
     );

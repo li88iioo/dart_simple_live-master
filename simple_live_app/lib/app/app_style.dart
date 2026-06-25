@@ -24,7 +24,6 @@ class AppStyle {
       fontFamily: fontFamily,
       visualDensity: VisualDensity.standard,
       appBarTheme: AppBarTheme(
-        //elevation: 0,
         centerTitle: true,
         titleTextStyle: TextStyle(
           fontFamily: fontFamily,
@@ -35,6 +34,13 @@ class AppStyle {
         systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
           systemNavigationBarColor: Colors.transparent,
         ),
+      ),
+      tabBarTheme: TabBarTheme(
+        labelColor: AppColors.lightColorScheme.primary,
+        unselectedLabelColor: Colors.grey.shade600,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: Colors.transparent,
+        indicatorColor: AppColors.lightColorScheme.primary,
       ),
     );
   }
@@ -50,8 +56,6 @@ class AppStyle {
             fontFamily: fontFamily,
           ),
       appBarTheme: AppBarTheme(
-        //elevation: 0,
-
         centerTitle: true,
         titleTextStyle: TextStyle(
           fontFamily: fontFamily,
@@ -63,25 +67,13 @@ class AppStyle {
           systemNavigationBarColor: Colors.transparent,
         ),
       ),
-      // radioTheme: RadioThemeData(
-      //   fillColor: MaterialStateProperty.all(AppColors.darkColorScheme.primary),
-      // ),
-      // checkboxTheme: CheckboxThemeData(
-      //   fillColor: MaterialStateProperty.all(AppColors.darkColorScheme.primary),
-      // ),
-      // tabBarTheme: TabBarTheme(
-      //   labelColor: AppColors.darkColorScheme.primary,
-      //   unselectedLabelColor: Colors.white70,
-      //   indicator: RectangularIndicator(
-      //     color: Colors.white.withAlpha(50),
-      //     topLeftRadius: 24,
-      //     bottomLeftRadius: 24,
-      //     topRightRadius: 24,
-      //     bottomRightRadius: 24,
-      //     verticalPadding: 8,
-      //     horizontalPadding: 0,
-      //   ),
-      // ),
+      tabBarTheme: TabBarTheme(
+        labelColor: AppColors.darkColorScheme.primary,
+        unselectedLabelColor: Colors.grey.shade400,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: Colors.transparent,
+        indicatorColor: AppColors.darkColorScheme.primary,
+      ),
     );
   }
 
@@ -170,12 +162,12 @@ class AppStyle {
   static const edgeInsetsB12 = EdgeInsets.only(bottom: 12);
   static const edgeInsetsB24 = EdgeInsets.only(bottom: 24);
 
-  static BorderRadius radius4 = BorderRadius.circular(4);
-  static BorderRadius radius8 = BorderRadius.circular(8);
-  static BorderRadius radius12 = BorderRadius.circular(12);
-  static BorderRadius radius24 = BorderRadius.circular(24);
-  static BorderRadius radius32 = BorderRadius.circular(32);
-  static BorderRadius radius48 = BorderRadius.circular(48);
+  static BorderRadius radius4 = BorderRadius.circular(6);
+  static BorderRadius radius8 = BorderRadius.circular(12);
+  static BorderRadius radius12 = BorderRadius.circular(16);
+  static BorderRadius radius24 = BorderRadius.circular(28);
+  static BorderRadius radius32 = BorderRadius.circular(36);
+  static BorderRadius radius48 = BorderRadius.circular(50);
 
   /// 顶部状态栏的高度
   static double get statusBarHeight => MediaQuery.of(Get.context!).padding.top;
@@ -185,10 +177,10 @@ class AppStyle {
       MediaQuery.of(Get.context!).padding.bottom;
 
   static Divider get divider => Divider(
-        height: 1,
-        thickness: 1,
+        height: 0.5,
+        thickness: 0.5,
         indent: 16,
         endIndent: 16,
-        color: Colors.grey.withAlpha(25),
+        color: Colors.grey.withAlpha(35),
       );
 }

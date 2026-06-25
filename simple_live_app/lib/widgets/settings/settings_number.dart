@@ -33,7 +33,7 @@ class SettingsNumber extends StatelessWidget {
         style: Get.textTheme.bodyLarge,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: AppStyle.radius8,
+        borderRadius: AppStyle.radius12,
       ),
       subtitle: subtitle == null
           ? null
@@ -105,6 +105,11 @@ class SettingsNumber extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(20),
+        ),
+      ),
       useSafeArea: true, //useSafeArea似乎无效
       builder: (_) => SafeArea(
         top: false,

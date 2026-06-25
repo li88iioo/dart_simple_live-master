@@ -13,53 +13,74 @@ class SearchPage extends GetView<AppSearchController> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: TextField(
-          controller: controller.searchController,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: "搜点什么吧",
-            border: OutlineInputBorder(
-              borderRadius: AppStyle.radius24,
-            ),
-            contentPadding: AppStyle.edgeInsetsH12,
-            prefixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  onPressed: Get.back,
-                  icon: const Icon(Icons.arrow_back),
-                ),
-                Obx(
-                  () => DropdownButton<int>(
-                    underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 0,
-                        child: Text("房间"),
-                      ),
-                      DropdownMenuItem(
-                        value: 1,
-                        child: Text("主播"),
-                      ),
-                    ],
-                    value: controller.searchMode.value,
-                    onChanged: (e) {
-                      controller.searchMode.value = e ?? 0;
-                      controller.doSearch();
-                    },
-                  ),
-                ),
-                AppStyle.hGap8,
-              ],
-            ),
-            suffixIcon: IconButton(
-              onPressed: controller.doSearch,
-              icon: const Icon(Icons.search),
-            ),
+        titleSpacing: 12,
+        title: Container(
+          height: 38,
+          decoration: BoxDecoration(
+            color: Get.isDarkMode
+                ? Colors.white.withOpacity(0.08)
+                : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(19),
           ),
-          onSubmitted: (e) {
-            controller.doSearch();
-          },
+          child: Row(
+            children: [
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                onPressed: Get.back,
+                icon: const Icon(Icons.arrow_back, size: 20),
+              ),
+              Obx(
+                () => DropdownButton<int>(
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.arrow_drop_down, size: 16),
+                  style: TextStyle(
+                    color: Get.theme.textTheme.bodyMedium?.color,
+                    fontSize: 13,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 0,
+                      child: Text("房间"),
+                    ),
+                    DropdownMenuItem(
+                      value: 1,
+                      child: Text("主播"),
+                    ),
+                  ],
+                  value: controller.searchMode.value,
+                  onChanged: (e) {
+                    controller.searchMode.value = e ?? 0;
+                    controller.doSearch();
+                  },
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: TextField(
+                  controller: controller.searchController,
+                  autofocus: true,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: const InputDecoration(
+                    hintText: "搜点什么吧",
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onSubmitted: (e) {
+                    controller.doSearch();
+                  },
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                onPressed: controller.doSearch,
+                icon: const Icon(Icons.search, size: 20),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ),
         ),
         bottom: TabBar(
           controller: controller.tabController,

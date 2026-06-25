@@ -29,8 +29,8 @@ class LiveRoomCard extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
                 ),
                 child: NetImage(
                   item.cover,
@@ -40,47 +40,40 @@ class LiveRoomCard extends StatelessWidget {
                 ),
               ),
               Positioned(
-                right: 0,
-                left: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 8,
-                  ),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black87,
-                        Colors.transparent,
+                right: 6,
+                bottom: 6,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    color: Colors.black.withOpacity(0.55),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          site.iconData,
+                          color: Colors.white,
+                          size: 11,
+                        ),
+                        AppStyle.hGap4,
+                        Text(
+                          Utils.onlineToString(item.online),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                        )
                       ],
                     ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Icon(
-                        site.iconData,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                      AppStyle.hGap4,
-                      Text(
-                        Utils.onlineToString(item.online),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                        ),
-                      )
-                    ],
                   ),
                 ),
               ),
             ],
           ),
-          // like ListTitle, but listTile is oversized
           Padding(
             padding: AppStyle.edgeInsetsH8.copyWith(
               top: 8,
@@ -98,16 +91,20 @@ class LiveRoomCard extends StatelessWidget {
                         item.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
                         item.userName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          height: 1.4,
-                          fontSize: 12,
-                          color: Colors.grey,
+                        style: TextStyle(
+                          height: 1.3,
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
                         ),
                       ),
                     ],

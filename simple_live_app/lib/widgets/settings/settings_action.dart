@@ -28,7 +28,7 @@ class SettingsAction extends StatelessWidget {
         style: Theme.of(context).textTheme.bodyLarge,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: AppStyle.radius8,
+        borderRadius: AppStyle.radius12,
       ),
       contentPadding: AppStyle.edgeInsetsL16.copyWith(right: 8),
       subtitle: subtitle == null

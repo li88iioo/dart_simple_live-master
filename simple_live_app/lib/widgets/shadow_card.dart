@@ -9,7 +9,7 @@ class ShadowCard extends StatelessWidget {
   final Function()? onLongPress;
   const ShadowCard({
     required this.child,
-    this.radius = 8.0,
+    this.radius = 12.0,
     this.onTap,
     this.onLongPress,
     super.key,
@@ -17,28 +17,37 @@ class ShadowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: Get.isDarkMode
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.06),
+          width: 0.5,
+        ),
+        boxShadow: isDark
             ? []
             : [
                 BoxShadow(
-                  blurRadius: 4,
-                  color: Colors.grey.withAlpha(50),
-                )
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                  spreadRadius: 0,
+                ),
               ],
       ),
       child: Material(
         color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius: BorderRadius.circular(radius - 0.5),
         child: InkWell(
-          borderRadius: BorderRadius.circular(radius),
+          borderRadius: BorderRadius.circular(radius - 0.5),
           onLongPress: onLongPress,
           onTap: onTap,
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: AppStyle.radius8,
+              borderRadius: BorderRadius.circular(radius - 0.5),
             ),
             child: child,
           ),

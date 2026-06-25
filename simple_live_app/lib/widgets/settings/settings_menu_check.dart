@@ -59,7 +59,7 @@ class SettingsMenuCheck<T> extends StatelessWidget {
         style: Theme.of(context).textTheme.bodyLarge,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: AppStyle.radius8,
+        borderRadius: AppStyle.radius12,
       ),
       contentPadding: AppStyle.edgeInsetsL16.copyWith(right: 8),
       subtitle: subtitle == null
@@ -130,8 +130,8 @@ class SettingsMenuCheck<T> extends StatelessWidget {
       ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(12),
-          topRight: Radius.circular(12),
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
         ),
       ),
       builder: (_) {

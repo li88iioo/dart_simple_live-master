@@ -90,7 +90,7 @@ class CategoryListView extends StatelessWidget {
             item.pic ?? "",
             width: 40,
             height: 40,
-            borderRadius: 8,
+            borderRadius: 12,
           ),
           AppStyle.vGap4,
           Text(
