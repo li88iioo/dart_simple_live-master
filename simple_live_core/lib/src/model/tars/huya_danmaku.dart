@@ -140,17 +140,17 @@ class HYGiftNotice extends TarsStruct {
   void readFrom(TarsInputStream _is) {
     lSenderUid = _is.read(lSenderUid, 0, false);
     lSenderUid2 = _is.read(lSenderUid2, 1, false);
-    sSenderNick = _is.read(sSenderNick, 2, false);
-    lPresenterUid = _is.read(lPresenterUid, 3, false);
-    lPresenterUid2 = _is.read(lPresenterUid2, 4, false);
-    sPresenterNick = _is.read(sPresenterNick, 5, false);
-    iGiftId = _is.read(iGiftId, 6, false);
-    sGiftName = _is.read(sGiftName, 7, false);
-    iGiftCount = _is.read(iGiftCount, 8, false);
-    iCombo = _is.read(iCombo, 9, false);
-    iSlot = _is.read(iSlot, 10, false);
-    iItemType = _is.read(iItemType, 11, false);
-    iPrice = _is.read(iPrice, 12, false);
+    sSenderNick = _is.read(sSenderNick, 3, false);
+    lPresenterUid = _is.read(lPresenterUid, 4, false);
+    lPresenterUid2 = _is.read(lPresenterUid2, 5, false);
+    sPresenterNick = _is.read(sPresenterNick, 6, false);
+    iGiftId = _is.read(iGiftId, 7, false);
+    sGiftName = _is.read(sGiftName, 8, false);
+    iGiftCount = _is.read(iGiftCount, 9, false);
+    iCombo = _is.read(iCombo, 10, false);
+    iSlot = _is.read(iSlot, 11, false);
+    iItemType = _is.read(iItemType, 12, false);
+    iPrice = _is.read(iPrice, 13, false);
   }
 
   @override

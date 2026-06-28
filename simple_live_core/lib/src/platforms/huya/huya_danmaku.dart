@@ -45,6 +45,21 @@ class HuyaDanmaku implements LiveDanmaku {
 
   late HuyaDanmakuArgs danmakuArgs;
 
+  final Set<String> _giftCache = {};
+
+  bool _isDuplicateGift(String sender, String giftName, int count) {
+    if (sender.isEmpty || giftName.isEmpty) return false;
+    final key = "$sender-$giftName-$count";
+    if (_giftCache.contains(key)) {
+      return true;
+    }
+    _giftCache.add(key);
+    Future.delayed(const Duration(seconds: 3), () {
+      _giftCache.remove(key);
+    });
+    return false;
+  }
+
   @override
   Future start(dynamic args) async {
     danmakuArgs = args as HuyaDanmakuArgs;
@@ -73,7 +88,7 @@ class HuyaDanmaku implements LiveDanmaku {
 
   void joinRoom() {
     var joinData =
-        getJoinData(danmakuArgs.ayyuid, danmakuArgs.topSid, danmakuArgs.topSid);
+        getJoinData(danmakuArgs.ayyuid, danmakuArgs.topSid, danmakuArgs.subSid);
     webScoketUtils?.sendMessage(joinData);
   }
 
@@ -161,6 +176,9 @@ class HuyaDanmaku implements LiveDanmaku {
             var sender = giftNotice.sSenderNick;
             var count = giftNotice.iGiftCount;
             if (count <= 0) count = 1;
+            if (_isDuplicateGift(sender, giftName, count)) {
+              return;
+            }
             onMessage?.call(
               LiveMessage(
                 type: LiveMessageType.gift,
@@ -189,6 +207,9 @@ class HuyaDanmaku implements LiveDanmaku {
               var sender = giftData["sender"] ?? "";
               var giftName = giftData["giftName"] ?? "";
               var count = giftData["count"] ?? 1;
+              if (_isDuplicateGift(sender, giftName, count)) {
+                return;
+              }
               onMessage?.call(
                 LiveMessage(
                   type: LiveMessageType.gift,
@@ -282,6 +303,13 @@ class HuyaDanmaku implements LiveDanmaku {
           var val = String.fromCharCodes(data.sublist(pos, pos + valLen));
           pos += valLen;
           result[key] = val;
+        } else if (valType == 0x02) {
+          // int32 value
+          if (pos + 4 > data.length) break;
+          var bd = ByteData.sublistView(data, pos, pos + 4);
+          var val = bd.getInt32(0, Endian.big);
+          pos += 4;
+          result[key] = val.toString();
         } else {
           break;
         }
