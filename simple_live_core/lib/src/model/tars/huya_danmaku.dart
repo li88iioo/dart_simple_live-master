@@ -120,3 +120,90 @@ class HYBulletFormat extends TarsStruct {
   @override
   void displayAsString(StringBuffer sb, int level) {}
 }
+
+class HYGiftNotice extends TarsStruct {
+  int lSenderUid = 0;
+  int lSenderUid2 = 0;
+  String sSenderNick = "";
+  int lPresenterUid = 0;
+  int lPresenterUid2 = 0;
+  String sPresenterNick = "";
+  int iGiftId = 0;
+  String sGiftName = "";
+  int iGiftCount = 0;
+  int iCombo = 0;
+  int iSlot = 0;
+  int iItemType = 0;
+  int iPrice = 0;
+
+  @override
+  void readFrom(TarsInputStream _is) {
+    lSenderUid = _is.read(lSenderUid, 0, false);
+    lSenderUid2 = _is.read(lSenderUid2, 1, false);
+    sSenderNick = _is.read(sSenderNick, 2, false);
+    lPresenterUid = _is.read(lPresenterUid, 3, false);
+    lPresenterUid2 = _is.read(lPresenterUid2, 4, false);
+    sPresenterNick = _is.read(sPresenterNick, 5, false);
+    iGiftId = _is.read(iGiftId, 6, false);
+    sGiftName = _is.read(sGiftName, 7, false);
+    iGiftCount = _is.read(iGiftCount, 8, false);
+    iCombo = _is.read(iCombo, 9, false);
+    iSlot = _is.read(iSlot, 10, false);
+    iItemType = _is.read(iItemType, 11, false);
+    iPrice = _is.read(iPrice, 12, false);
+  }
+
+  @override
+  void writeTo(TarsOutputStream _os) {}
+
+  @override
+  Object deepCopy() {
+    return HYGiftNotice()
+      ..lSenderUid = lSenderUid
+      ..lSenderUid2 = lSenderUid2
+      ..sSenderNick = sSenderNick
+      ..lPresenterUid = lPresenterUid
+      ..lPresenterUid2 = lPresenterUid2
+      ..sPresenterNick = sPresenterNick
+      ..iGiftId = iGiftId
+      ..sGiftName = sGiftName
+      ..iGiftCount = iGiftCount
+      ..iCombo = iCombo
+      ..iSlot = iSlot
+      ..iItemType = iItemType
+      ..iPrice = iPrice;
+  }
+
+  @override
+  void displayAsString(StringBuffer sb, int level) {}
+}
+
+class HYVipEnterNotice extends TarsStruct {
+  int lUid = 0;
+  int lUid2 = 0;
+  String sNickName = "";
+  int iBadgeType = 0;
+
+  @override
+  void readFrom(TarsInputStream _is) {
+    lUid = _is.read(lUid, 0, false);
+    lUid2 = _is.read(lUid2, 1, false);
+    sNickName = _is.read(sNickName, 2, false);
+    iBadgeType = _is.read(iBadgeType, 5, false);
+  }
+
+  @override
+  void writeTo(TarsOutputStream _os) {}
+
+  @override
+  Object deepCopy() {
+    return HYVipEnterNotice()
+      ..lUid = lUid
+      ..lUid2 = lUid2
+      ..sNickName = sNickName
+      ..iBadgeType = iBadgeType;
+  }
+
+  @override
+  void displayAsString(StringBuffer sb, int level) {}
+}

@@ -40,6 +40,12 @@ class LiveRoomDetail {
   /// 链接
   final String url;
 
+  /// 粉丝数
+  final int? fansCount;
+
+  /// 贵宾数
+  final int? vipCount;
+
   LiveRoomDetail({
     required this.roomId,
     required this.title,
@@ -54,6 +60,8 @@ class LiveRoomDetail {
     this.danmakuData,
     required this.url,
     this.isRecord = false,
+    this.fansCount,
+    this.vipCount,
   });
 
   LiveRoomDetail copyWith({
@@ -70,6 +78,8 @@ class LiveRoomDetail {
     dynamic danmakuData,
     String? url,
     bool? isRecord,
+    int? fansCount,
+    int? vipCount,
   }) {
     return LiveRoomDetail(
       roomId: roomId ?? this.roomId,
@@ -85,6 +95,8 @@ class LiveRoomDetail {
       danmakuData: danmakuData ?? this.danmakuData,
       isRecord: isRecord ?? this.isRecord,
       url: url ?? this.url,
+      fansCount: fansCount ?? this.fansCount,
+      vipCount: vipCount ?? this.vipCount,
     );
   }
 
@@ -112,6 +124,8 @@ class LiveRoomDetail {
       "danmakuData": danmakuData.toString(),
       "url": url,
       "isRecord": isRecord,
+      "fansCount": fansCount,
+      "vipCount": vipCount,
     });
   }
 }

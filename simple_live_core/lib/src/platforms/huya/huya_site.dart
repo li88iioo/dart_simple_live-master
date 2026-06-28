@@ -239,6 +239,27 @@ class HuyaSite implements LiveSite {
       queryParameters: {},
       header: requestHeaders,
     );
+
+    // 同时请求移动端页面获取粉丝数
+    int? fansCount;
+    try {
+      var mobileText = await HttpClient.instance.getText(
+        "https://m.huya.com/$roomId",
+        queryParameters: {},
+        header: {
+          "User-Agent":
+              "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        },
+      );
+      var fansMatch =
+          RegExp(r'"lActivityCount":(\d+)').firstMatch(mobileText);
+      if (fansMatch != null) {
+        fansCount = int.tryParse(fansMatch.group(1) ?? "");
+      }
+    } catch (e) {
+      CoreLog.error('获取粉丝数失败: $e');
+    }
+
     // get_live_status
     var roomData = RegExp(ROOM_DATA_REGEX, multiLine: false)
         .firstMatch(resultText)
@@ -269,6 +290,7 @@ class HuyaSite implements LiveSite {
           introduction: streamDataGameLiveInfo["introduction"],
           notice: streamDataGameLiveInfo["introduction"],
           isRecord: roomDataJson["isReplay"],
+          fansCount: fansCount,
         );
         // live -> add HuyaUrlDataModel and danmaku
         if (result.status) {
@@ -345,6 +367,7 @@ class HuyaSite implements LiveSite {
 
     return result;
   }
+
 
   // 构造 anticode, python转写
   /// [stream] streamname [presenterUid] 用户id [antiCode] 页面anti

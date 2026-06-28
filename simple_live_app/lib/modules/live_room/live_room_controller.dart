@@ -63,6 +63,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   Rx<LiveRoomDetail?> detail = Rx<LiveRoomDetail?>(null);
   var online = 0.obs;
+  var fansCount = 0.obs;
+  var vipCount = 0.obs;
   var followed = false.obs;
   var liveStatus = false.obs;
   RxList<LiveSuperChatMessage> superChats = RxList<LiveSuperChatMessage>();
@@ -343,6 +345,39 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       online.value = msg.data;
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
+    } else if (msg.type == LiveMessageType.gift) {
+      // 礼物消息：在弹幕区显示
+      if (messages.length > 200 && !disableAutoScroll.value) {
+        messages.removeAt(0);
+      }
+      messages.add(
+        LiveMessage(
+          type: LiveMessageType.chat,
+          userName: "LiveSysMessage",
+          message: msg.message,
+          color: LiveMessageColor(255, 215, 0), // 金色
+        ),
+      );
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => chatScrollToBottom(),
+      );
+    } else if (msg.type == LiveMessageType.vipEnter) {
+      // 贵宾进场：在弹幕区显示，并递增贵宾计数
+      vipCount.value++;
+      if (messages.length > 200 && !disableAutoScroll.value) {
+        messages.removeAt(0);
+      }
+      messages.add(
+        LiveMessage(
+          type: LiveMessageType.chat,
+          userName: "LiveSysMessage",
+          message: msg.message,
+          color: LiveMessageColor(138, 43, 226), // 紫色
+        ),
+      );
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => chatScrollToBottom(),
+      );
     }
   }
 
@@ -410,6 +445,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       followed.value =
           FollowService.instance.getFollowExist("${site.id}_$roomId");
       online.value = detail.value!.online;
+      fansCount.value = detail.value!.fansCount ?? 0;
+      vipCount.value = 0; // 贵宾数从WebSocket实时计数
       liveStatus.value = detail.value!.status || detail.value!.isRecord;
       if (liveStatus.value) {
         getPlayQualites();

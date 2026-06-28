@@ -4,7 +4,7 @@ enum LiveMessageType {
   /// 聊天
   chat,
 
-  /// 礼物,暂时不支持
+  /// 礼物
   gift,
 
   /// 在线人数
@@ -12,6 +12,9 @@ enum LiveMessageType {
 
   /// 醒目留言
   superChat,
+
+  /// 贵宾进场
+  vipEnter,
 }
 
 class LiveMessage {

@@ -350,22 +350,66 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               ),
             ),
             AppStyle.hGap12,
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Remix.fire_fill,
-                  size: 20,
-                  color: Colors.orange,
-                ),
-                AppStyle.hGap4,
-                Text(
-                  Utils.onlineToString(
-                    controller.detail.value?.online ?? 0,
+            Obx(
+              () => Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Remix.fire_fill,
+                        size: 16,
+                        color: Colors.orange,
+                      ),
+                      AppStyle.hGap4,
+                      Text(
+                        Utils.onlineToString(
+                          controller.detail.value?.online ?? 0,
+                        ),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
                   ),
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ],
+                  if (controller.fansCount.value > 0) ...[
+                    AppStyle.vGap4,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Remix.user_heart_fill,
+                          size: 16,
+                          color: Colors.pinkAccent,
+                        ),
+                        AppStyle.hGap4,
+                        Text(
+                          Utils.onlineToString(controller.fansCount.value),
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (controller.vipCount.value > 0) ...[
+                    AppStyle.vGap4,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Remix.vip_crown_fill,
+                          size: 16,
+                          color: Colors.amber,
+                        ),
+                        AppStyle.hGap4,
+                        Text(
+                          "${controller.vipCount.value}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),
