@@ -302,10 +302,11 @@ class HuyaSite implements LiveSite {
               int.tryParse(streamDataGameStreamInfo["lChannelId"].toString());
           var subSid = int.tryParse(
               streamDataGameStreamInfo["lSubChannelId"].toString());
-          var yySid = int.tryParse(streamDataGameLiveInfo["yyid"].toString());
+          var presenterUid =
+              int.tryParse(streamDataGameLiveInfo["uid"].toString());
           result = result.updateDanmakuData(
             HuyaDanmakuArgs(
-              ayyuid: yySid ?? 0,
+              ayyuid: presenterUid ?? 0,
               topSid: topSid ?? 0,
               subSid: subSid ?? 0,
             ),

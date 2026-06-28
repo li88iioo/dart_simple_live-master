@@ -1,7 +1,7 @@
 {
-    "version": "1.8.9",
-    "version_num": 10809,
-    "version_desc": "- 全局 iOS 26 风格极简 UI 改造（半透明马卡龙色系设置图标、悬浮磨砂玻璃导航栏）\n- 优化播放器中央暂停/播放按钮交互，支持直接点击画面中央直接恢复播放\n- 修复并优化 GitHub Actions 自动构建脚本，支持零配置自动发布\n- 修复 Linux 平台 DEB 打包问题与 Android NDK 编译兼容性",
+    "version": "1.8.12",
+    "version_num": 10812,
+    "version_desc": "- 修复虎牙直播贵宾与礼物不显示的问题\n- 直播间右上角原关注数位置改为显示当前贵宾数\n- 新增礼物消息 3s 滑动窗口自动去重机制，防止多协议通道重复显示",
     "prerelease": true,
     "download_url": "https://github.com/li88iioo/dart_simple_live-master/releases"
 }
