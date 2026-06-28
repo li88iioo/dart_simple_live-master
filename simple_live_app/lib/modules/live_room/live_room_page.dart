@@ -372,25 +372,8 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       ),
                     ],
                   ),
-                  if (controller.fansCount.value > 0) ...[
-                    AppStyle.vGap4,
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Remix.user_heart_fill,
-                          size: 16,
-                          color: Colors.pinkAccent,
-                        ),
-                        AppStyle.hGap4,
-                        Text(
-                          Utils.onlineToString(controller.fansCount.value),
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (controller.vipCount.value > 0) ...[
+                  if (controller.site.id == "huya" ||
+                      controller.vipCount.value > 0) ...[
                     AppStyle.vGap4,
                     Row(
                       mainAxisSize: MainAxisSize.min,
