@@ -343,6 +343,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       }
     } else if (msg.type == LiveMessageType.online) {
       online.value = msg.data;
+      if (site.id == "huya") {
+        vipCount.value = msg.data;
+      }
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
     } else if (msg.type == LiveMessageType.gift) {

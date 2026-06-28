@@ -1,7 +1,7 @@
 {
-    "version": "1.8.12",
-    "version_num": 10812,
-    "version_desc": "- 修复虎牙直播贵宾与礼物不显示的问题\n- 直播间右上角原关注数位置改为显示当前贵宾数\n- 新增礼物消息 3s 滑动窗口自动去重机制，防止多协议通道重复显示",
+    "version": "1.8.13",
+    "version_num": 10813,
+    "version_desc": "- 修复虎牙直播贵宾与礼物不显示的问题\n- 直播间右上角原关注数位置改为显示当前贵宾数\n- 新增礼物消息 3s 滑动窗口自动去重机制，防止多协议通道重复显示\n- 修复贵宾数为 0 且礼物看不见的问题，正确映射 WebSocket 消息通道",
     "prerelease": true,
     "download_url": "https://github.com/li88iioo/dart_simple_live-master/releases"
 }
