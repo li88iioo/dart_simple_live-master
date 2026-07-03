@@ -362,8 +362,20 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         (_) => chatScrollToBottom(),
       );
     } else if (msg.type == LiveMessageType.vipEnter) {
-      // 贵宾进场：在弹幕区显示，并递增贵宾计数
-      vipCount.value++;
+      if (site.id == Constant.kHuya) {
+        // 虎牙 6210/6211/6213 会推送贵宾总数；旧进场消息仍按进入事件递增。
+        final data = msg.data;
+        if (data is Map && data["count"] is num) {
+          vipCount.value = (data["count"] as num).toInt();
+        } else {
+          vipCount.value++;
+        }
+        if (msg.message.isEmpty) {
+          return;
+        }
+      } else {
+        vipCount.value++;
+      }
       if (messages.length > 200 && !disableAutoScroll.value) {
         messages.removeAt(0);
       }
