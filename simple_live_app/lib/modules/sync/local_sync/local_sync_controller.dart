@@ -11,6 +11,7 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/requests/sync_client_request.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/routes/route_path.dart';
+import 'package:simple_live_app/services/local_sync_endpoint.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 
 class LocalSyncController extends BaseController {
@@ -21,72 +22,75 @@ class LocalSyncController extends BaseController {
   final TextEditingController pairingCodeController = TextEditingController();
   final SyncClientRequest request = SyncClientRequest();
 
+  bool _active = true;
+
   @override
   void onInit() {
-    Future.delayed(Duration.zero, _initialize);
     super.onInit();
+    unawaited(Future<void>.delayed(Duration.zero, _initialize));
   }
 
   Future<void> _initialize() async {
+    if (!_active) return;
+
     pageLoadding.value = true;
     try {
       await SyncService.instance.start();
-      await SyncService.instance.refreshClients();
+      if (!_active) return;
+
+      await SyncService.instance.refreshClients(ensureStarted: false);
+      if (!_active) return;
+
       await _applyInitialAddress();
     } catch (error) {
-      handleError(error, showPageError: false);
+      if (_active) {
+        handleError(error, showPageError: false);
+      }
     } finally {
-      pageLoadding.value = false;
+      if (_active) {
+        pageLoadding.value = false;
+      }
     }
   }
 
   Future<void> _applyInitialAddress() async {
+    if (!_active) return;
+
     final value = address?.trim() ?? '';
     if (value.isEmpty) return;
 
-    final target = await _parseConnectionInput(value);
-    if (target == null) return;
+    final target = await _selectConnectionTarget(value);
+    if (!_active || target == null) return;
 
-    addressController.text = target.address;
-    pairingCodeController.text = target.pairingCode;
+    _applyTarget(target);
     if (target.pairingCode.isNotEmpty) {
-      await connect(port: target.port);
+      await _connectEndpoint(target.endpoint);
     }
   }
 
-  Future<void> connect({int port = SyncService.httpPort}) async {
-    var address = addressController.text.trim();
-    if (address.isEmpty) {
+  Future<void> connect() async {
+    if (!_active) return;
+
+    final input = addressController.text.trim();
+    if (input.isEmpty) {
       SmartDialog.showToast('请输入地址');
       return;
     }
 
-    final uriTarget = await _parseConnectionInput(address);
-    if (uriTarget != null && uriTarget.isSyncUri) {
-      address = uriTarget.address;
-      port = uriTarget.port;
-      addressController.text = address;
-      if (uriTarget.pairingCode.isNotEmpty) {
-        pairingCodeController.text = uriTarget.pairingCode;
-      }
-    } else if (address.startsWith('http')) {
-      final uri = Uri.tryParse(address);
-      if (uri != null && uri.host.isNotEmpty) {
-        address = uri.host;
-        port = uri.hasPort ? uri.port : port;
-      }
-    } else if (address.contains(':') && !address.contains(';')) {
-      final uri = Uri.tryParse('http://$address');
-      if (uri != null && uri.host.isNotEmpty) {
-        address = uri.host;
-        port = uri.hasPort ? uri.port : port;
-      }
-    }
+    final target = await _selectConnectionTarget(input);
+    if (!_active || target == null) return;
+
+    _applyTarget(target);
+    await _connectEndpoint(target.endpoint);
+  }
+
+  Future<void> _connectEndpoint(LocalSyncEndpoint endpoint) async {
+    if (!_active) return;
 
     final client = SyncClinet(
       id: 'manual',
-      address: address,
-      port: port,
+      address: endpoint.address,
+      port: endpoint.port,
       name: '手动输入',
       type: Platform.operatingSystem,
       pairingCode: pairingCodeController.text.trim(),
@@ -95,6 +99,16 @@ class LocalSyncController extends BaseController {
   }
 
   Future<void> connectClient(SyncClinet client) async {
+    if (!_active) return;
+
+    final endpoint = LocalSyncEndpoint.tryParse(
+      '${client.address}:${client.port}',
+    );
+    if (endpoint == null) {
+      SmartDialog.showToast('仅支持连接局域网 IPv4 地址');
+      return;
+    }
+
     var code = client.pairingCode.trim();
     if (!_isValidPairingCode(code)) {
       final result = await Utils.showEditTextDialog(
@@ -103,102 +117,116 @@ class LocalSyncController extends BaseController {
         hintText: '请输入对方设备显示的 8 位配对码',
         validate: _isValidPairingCode,
       );
-      if (result == null) return;
+      if (!_active || result == null) return;
       code = result.trim();
     }
 
-    final pairedClient = client.copyWith(pairingCode: code);
+    final pairedClient = client.copyWith(
+      address: endpoint.address,
+      port: endpoint.port,
+      pairingCode: code,
+    );
     try {
       SmartDialog.showLoading(msg: '连接中...');
       final info = await request.getClientInfo(pairedClient);
+      if (!_active) return;
+
       await AppNavigator.toSyncDevice(pairedClient, info);
     } catch (error) {
-      SmartDialog.showToast('连接失败，请检查地址和配对码');
+      if (_active) {
+        SmartDialog.showToast('连接失败，请检查地址和配对码');
+      }
     } finally {
       SmartDialog.dismiss();
     }
   }
 
   Future<void> toScanQr() async {
+    if (!_active) return;
+
     final result = await Get.toNamed(RoutePath.kSyncScan);
-    if (result is! String || result.trim().isEmpty) return;
+    if (!_active || result is! String || result.trim().isEmpty) return;
 
-    final target = await _parseConnectionInput(result.trim());
-    if (target == null) {
-      SmartDialog.showToast('二维码中没有有效的同步地址');
-      return;
-    }
+    final target = await _selectConnectionTarget(result.trim());
+    if (!_active || target == null) return;
 
-    addressController.text = target.address;
-    pairingCodeController.text = target.pairingCode;
+    _applyTarget(target);
     if (target.pairingCode.isNotEmpty) {
-      await connect(port: target.port);
+      await _connectEndpoint(target.endpoint);
     }
   }
 
-  Future<_SyncTarget?> _parseConnectionInput(String input) async {
-    final uri = Uri.tryParse(input);
-    if (uri != null && uri.scheme == 'simplelive' && uri.host == 'sync') {
-      final addresses = (uri.queryParameters['addresses'] ?? '')
-          .split(';')
-          .map((item) => item.trim())
-          .where((item) => item.isNotEmpty)
-          .toList(growable: false);
-      if (addresses.isEmpty) return null;
-
-      final selectedAddress = addresses.length == 1
-          ? addresses.first
-          : await showPickerAddress(addresses);
-      if (selectedAddress == null) return null;
-
-      return _SyncTarget(
-        address: selectedAddress,
-        port: _parsePort(uri.queryParameters['port']),
-        pairingCode: uri.queryParameters['code'] ?? '',
-        isSyncUri: true,
-      );
+  Future<_SelectedSyncTarget?> _selectConnectionTarget(String input) async {
+    final LocalSyncConnectionInput parsed;
+    try {
+      parsed = LocalSyncConnectionInput.parse(input);
+    } on FormatException catch (error) {
+      if (_active) {
+        SmartDialog.showToast(error.message.toString());
+      }
+      return null;
     }
 
-    final addresses = input
-        .split(';')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
-    if (addresses.length > 1) {
-      final selectedAddress = await showPickerAddress(addresses);
-      if (selectedAddress == null) return null;
-      return _SyncTarget(address: selectedAddress);
-    }
+    if (!_active) return null;
 
-    return _SyncTarget(address: input);
+    final endpoint = parsed.endpoints.length == 1
+        ? parsed.endpoints.first
+        : await showPickerAddress(parsed.endpoints);
+    if (!_active || endpoint == null) return null;
+
+    return _SelectedSyncTarget(
+      endpoint: endpoint,
+      pairingCode: parsed.pairingCode,
+    );
   }
 
-  Future<String?> showPickerAddress(List<String> addressList) async {
+  void _applyTarget(_SelectedSyncTarget target) {
+    if (!_active) return;
+
+    addressController.text = target.endpoint.displayAddress;
+    if (target.pairingCode.isNotEmpty) {
+      pairingCodeController.text = target.pairingCode;
+    }
+  }
+
+  Future<LocalSyncEndpoint?> showPickerAddress(
+    List<LocalSyncEndpoint> addressList,
+  ) async {
+    if (!_active) return null;
+
     SmartDialog.showToast('扫描到多个地址，请选择一个连接');
     final result = await Utils.showBottomSheet(
       title: '请选择地址',
       child: ListView.builder(
         itemCount: addressList.length,
         itemBuilder: (_, index) {
+          final endpoint = addressList[index];
           return ListTile(
-            title: Text(addressList[index]),
-            onTap: () => Get.back(result: addressList[index]),
+            title: Text(endpoint.displayAddress),
+            onTap: () => Get.back(result: endpoint),
           );
         },
       ),
     );
-    return result is String ? result : null;
+    if (!_active) return null;
+    return result is LocalSyncEndpoint ? result : null;
   }
 
   Future<void> refreshClients() async {
+    if (!_active) return;
+
     try {
       await SyncService.instance.refreshClients();
     } catch (error) {
-      SmartDialog.showToast('刷新设备失败，请检查网络权限或端口占用');
+      if (_active) {
+        SmartDialog.showToast('刷新设备失败，请检查网络权限或端口占用');
+      }
     }
   }
 
   void showInfo() {
+    if (!_active) return;
+
     Utils.showBottomSheet(
       title: '本机信息',
       child: Obx(
@@ -264,20 +292,13 @@ class LocalSyncController extends BaseController {
     );
   }
 
-  int _parsePort(String? value) {
-    final port = int.tryParse(value ?? '');
-    if (port == null || port < 1 || port > 65535) {
-      return SyncService.httpPort;
-    }
-    return port;
-  }
-
   bool _isValidPairingCode(String value) {
     return RegExp(r'^\d{8}$').hasMatch(value.trim());
   }
 
   @override
   void onClose() {
+    _active = false;
     addressController.dispose();
     pairingCodeController.dispose();
     unawaited(SyncService.instance.stop());
@@ -285,16 +306,12 @@ class LocalSyncController extends BaseController {
   }
 }
 
-class _SyncTarget {
-  const _SyncTarget({
-    required this.address,
-    this.port = SyncService.httpPort,
+class _SelectedSyncTarget {
+  const _SelectedSyncTarget({
+    required this.endpoint,
     this.pairingCode = '',
-    this.isSyncUri = false,
   });
 
-  final String address;
-  final int port;
+  final LocalSyncEndpoint endpoint;
   final String pairingCode;
-  final bool isSyncUri;
 }

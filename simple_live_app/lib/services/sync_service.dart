@@ -20,13 +20,14 @@ import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/services/db_service.dart';
+import 'package:simple_live_app/services/local_sync_endpoint.dart';
 import 'package:udp/udp.dart';
 
 class SyncService extends GetxService {
   static SyncService get instance => Get.find<SyncService>();
 
   static const int udpPort = 23235;
-  static const int httpPort = 23234;
+  static const int httpPort = LocalSyncEndpoint.defaultPort;
   static const String pairingCodeHeader = 'x-simple-live-pairing-code';
 
   static const int _maxRequestBodyBytes = 2 * 1024 * 1024;
@@ -178,6 +179,8 @@ class SyncService extends GetxService {
       }
 
       final address = datagram.address.address;
+      if (!LocalSyncEndpoint.isAllowedAddress(address)) return;
+
       final index = scanClients.indexWhere(
         (element) => element.address == address,
       );
@@ -202,10 +205,12 @@ class SyncService extends GetxService {
     if (socket == null) return;
 
     await socket.send(
-      json.encode({
-        'id': deviceId,
-        'type': 'hello',
-      }).codeUnits,
+      utf8.encode(
+        json.encode({
+          'id': deviceId,
+          'type': 'hello',
+        }),
+      ),
       Endpoint.broadcast(port: const Port(udpPort)),
     );
   }
@@ -221,7 +226,7 @@ class SyncService extends GetxService {
     };
 
     await socket.send(
-      json.encode(data).codeUnits,
+      utf8.encode(json.encode(data)),
       Endpoint.broadcast(port: const Port(udpPort)),
     );
   }
@@ -242,17 +247,24 @@ class SyncService extends GetxService {
     return name;
   }
 
-  Future<void> refreshClients() async {
-    await start();
+  Future<void> refreshClients({bool ensureStarted = true}) async {
+    if (ensureStarted) {
+      await start();
+    }
+    if (!httpRunning.value || udp == null) return;
+
     scanClients.clear();
     await sendHello();
   }
 
-  /// 读取本地 IP。Wi-Fi 地址不可用时回退到全部非回环 IPv4 地址。
+  /// 读取本地 IP。Wi-Fi 地址不可用时回退到全部可连接的局域网 IPv4 地址。
   Future<String> getLocalIP() async {
-    String? ip = '';
+    String? ip;
     try {
-      ip = await networkInfo.getWifiIP();
+      final wifiIp = await networkInfo.getWifiIP();
+      if (_isAdvertisableAddress(wifiIp)) {
+        ip = wifiIp;
+      }
     } catch (error) {
       Log.logPrint(error, false);
     }
@@ -265,7 +277,8 @@ class SyncService extends GetxService {
           for (final address in interface.addresses) {
             if (address.type == InternetAddressType.IPv4 &&
                 !address.isMulticast &&
-                !address.isLoopback) {
+                !address.isLoopback &&
+                LocalSyncEndpoint.isAllowedAddress(address.address)) {
               ipList.add(address.address);
             }
           }
@@ -276,6 +289,12 @@ class SyncService extends GetxService {
       Log.logPrint(error, false);
     }
     return ip ?? '';
+  }
+
+  bool _isAdvertisableAddress(String? address) {
+    return address != null &&
+        !address.startsWith('127.') &&
+        LocalSyncEndpoint.isAllowedAddress(address);
   }
 
   Future<void> _initServer() async {

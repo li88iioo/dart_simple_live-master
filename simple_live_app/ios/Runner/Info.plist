@@ -64,6 +64,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>用于扫描二维码</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于发现并连接同一局域网内的 Simple Live 设备进行数据同步</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,10 +1,11 @@
 import 'package:simple_live_app/models/sync_client_info_model.dart';
 import 'package:simple_live_app/requests/http_client.dart';
+import 'package:simple_live_app/services/local_sync_endpoint.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 
 class SyncClientRequest {
   Future<SyncClientInfoModel> getClientInfo(SyncClinet client) async {
-    final url = 'http://${client.address}:${client.port}/info';
+    final url = _endpoint(client).uriFor('/info').toString();
     final data = await HttpClient.instance.getJson(
       url,
       header: _authHeaders(client),
@@ -70,7 +71,7 @@ class SyncClientRequest {
     required dynamic body,
     required bool overlay,
   }) async {
-    final url = 'http://${client.address}:${client.port}$path';
+    final url = _endpoint(client).uriFor(path).toString();
     final data = await HttpClient.instance.postJson(
       url,
       data: body,
@@ -84,6 +85,10 @@ class SyncClientRequest {
       return true;
     }
     throw data['message'] ?? '同步失败';
+  }
+
+  LocalSyncEndpoint _endpoint(SyncClinet client) {
+    return LocalSyncEndpoint.parse('${client.address}:${client.port}');
   }
 
   Map<String, dynamic> _authHeaders(SyncClinet client) {
