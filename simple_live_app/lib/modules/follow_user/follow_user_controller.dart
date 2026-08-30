@@ -214,91 +214,19 @@ class FollowUserController extends BasePageController<FollowUser> {
   }
 
   void setFollowTagDialog(FollowUser follow) {
-    /// 控制单选ui
-    List<FollowUserTag> copiedList = [
+    final tags = <FollowUserTag>[
       tagList.first,
       ...tagList.skip(3),
     ];
-    Rx<FollowUserTag> checkTag = tagList.indexOf(filterMode.value) < 3
-        ? copiedList.first.obs
-        : filterMode.value.obs;
-    final ScrollController scrollController = ScrollController();
-    Get.dialog(
-      AlertDialog(
-        contentPadding: const EdgeInsets.all(16.0),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12.0),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 标题栏
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  '设置标签',
-                  style: TextStyle(
-                    fontSize: 18,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.check,
-                  ),
-                  onPressed: () {
-                    setFollowTag(follow, checkTag.value);
-                    Get.back();
-                  },
-                ),
-              ],
-            ),
-            const Divider(),
-            Obx(
-              () {
-                int selectedIndex = copiedList.indexOf(checkTag.value);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (selectedIndex >= 0) {
-                    scrollController.animateTo(
-                      selectedIndex * 60.0, // 假设每项高度为 60
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  }
-                });
-                return SizedBox(
-                  height: 300,
-                  width: 300,
-                  child: RadioGroup<FollowUserTag>(
-                    groupValue: checkTag.value,
-                    onChanged: (value) {
-                      checkTag.value = value!;
-                    },
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: copiedList.length,
-                      itemBuilder: (context, index) {
-                        var tagItem = copiedList[index];
-                        return Container(
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                  color: Colors.grey.shade300, width: 1.0),
-                            ),
-                          ),
-                          child: RadioListTile<FollowUserTag>(
-                            title: Text(tagItem.tag),
-                            value: tagItem,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+    final initialTag =
+        tagList.indexOf(filterMode.value) < 3 ? tags.first : filterMode.value;
+
+    Get.dialog<void>(
+      _FollowTagDialog(
+        follow: follow,
+        tags: tags,
+        initialTag: initialTag,
+        onConfirm: setFollowTag,
       ),
     );
   }
@@ -308,5 +236,106 @@ class FollowUserController extends BasePageController<FollowUser> {
     onUpdatedIndexedStream?.cancel();
     onUpdatedListStream?.cancel();
     super.onClose();
+  }
+}
+
+class _FollowTagDialog extends StatefulWidget {
+  const _FollowTagDialog({
+    required this.follow,
+    required this.tags,
+    required this.initialTag,
+    required this.onConfirm,
+  });
+
+  final FollowUser follow;
+  final List<FollowUserTag> tags;
+  final FollowUserTag initialTag;
+  final void Function(FollowUser follow, FollowUserTag tag) onConfirm;
+
+  @override
+  State<_FollowTagDialog> createState() => _FollowTagDialogState();
+}
+
+class _FollowTagDialogState extends State<_FollowTagDialog> {
+  late FollowUserTag _selectedTag;
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTag = widget.initialTag;
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback(_scrollToSelectedTag);
+  }
+
+  void _scrollToSelectedTag(Duration _) {
+    if (!mounted || !_scrollController.hasClients) return;
+    final selectedIndex = widget.tags.indexOf(_selectedTag);
+    if (selectedIndex < 0) return;
+    final target = (selectedIndex * 60.0).clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
+    _scrollController.jumpTo(target);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    widget.onConfirm(widget.follow, _selectedTag);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      contentPadding: const EdgeInsets.all(16),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '设置标签',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              IconButton(
+                tooltip: '保存',
+                onPressed: _confirm,
+                icon: const Icon(Icons.check),
+              ),
+            ],
+          ),
+          const Divider(),
+          SizedBox(
+            height: 300,
+            width: 300,
+            child: RadioGroup<FollowUserTag>(
+              groupValue: _selectedTag,
+              onChanged: (value) {
+                if (value != null) setState(() => _selectedTag = value);
+              },
+              child: ListView.separated(
+                controller: _scrollController,
+                itemCount: widget.tags.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final tag = widget.tags[index];
+                  return RadioListTile<FollowUserTag>(
+                    title: Text(tag.tag),
+                    value: tag,
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

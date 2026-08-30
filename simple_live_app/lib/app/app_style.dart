@@ -129,6 +129,106 @@ class AppStyle {
       scaffoldBackgroundColor: colors.backgroundBase,
       canvasColor: colors.backgroundBase,
       cardColor: colors.glassBase.withValues(alpha: materials.cardOpacity),
+      cardTheme: CardThemeData(
+        color: colors.glassBase.withValues(alpha: materials.cardOpacity),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: const Color(0xFF8E7E6E).withValues(
+          alpha: materials.shadowOpacity,
+        ),
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SliveRadii.card),
+          side: BorderSide(
+            color: colors.glassBorder.withValues(
+              alpha: materials.borderOpacity * (isDark ? 0.62 : 0.82),
+            ),
+          ),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.glassStrong.withValues(alpha: 0.94),
+        modalBackgroundColor: colors.glassStrong.withValues(alpha: 0.94),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: const Color(0xFF5A4D43).withValues(alpha: 0.18),
+        modalBarrierColor: Colors.black.withValues(alpha: isDark ? 0.42 : 0.20),
+        elevation: 0,
+        modalElevation: 0,
+        showDragHandle: true,
+        dragHandleColor: colors.textTertiary.withValues(alpha: 0.42),
+        dragHandleSize: const Size(38, 4),
+        clipBehavior: Clip.antiAlias,
+        constraints: const BoxConstraints(maxWidth: 720),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(SliveRadii.panel),
+          ),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.glassStrong.withValues(alpha: 0.94),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: const Color(0xFF5A4D43).withValues(alpha: 0.18),
+        elevation: 0,
+        barrierColor: Colors.black.withValues(alpha: isDark ? 0.44 : 0.22),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SliveRadii.panel),
+          side: BorderSide(
+            color: colors.glassBorder.withValues(
+              alpha: materials.borderOpacity * (isDark ? 0.58 : 0.80),
+            ),
+          ),
+        ),
+        titleTextStyle: textTheme.titleLarge?.copyWith(
+          color: colors.textPrimary,
+        ),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
+          color: colors.textSecondary,
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: colors.glassStrong.withValues(alpha: 0.96),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shadowColor: const Color(0xFF5A4D43).withValues(alpha: 0.16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SliveRadii.control),
+          side: BorderSide(
+            color: colors.glassBorder.withValues(
+              alpha: materials.borderOpacity * (isDark ? 0.56 : 0.78),
+            ),
+          ),
+        ),
+        textStyle: textTheme.bodyMedium?.copyWith(color: colors.textPrimary),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Color.alphaBlend(
+          scheme.primary.withValues(alpha: 0.10),
+          isDark ? const Color(0xEE302B27) : const Color(0xEE2B2623),
+        ),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
+          color: const Color(0xFFFFFBF6),
+          fontWeight: FontWeight.w600,
+        ),
+        elevation: 0,
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SliveRadii.pill),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: colors.textPrimary.withValues(alpha: 0.90),
+          borderRadius: BorderRadius.circular(SliveRadii.pill),
+        ),
+        textStyle: textTheme.labelMedium?.copyWith(
+          color: isDark ? const Color(0xFF2B2623) : const Color(0xFFFFFBF6),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       dividerColor: colors.divider.withValues(alpha: isDark ? 0.16 : 0.10),
       splashColor: scheme.primary.withValues(alpha: 0.08),
       highlightColor: scheme.primary.withValues(alpha: 0.04),

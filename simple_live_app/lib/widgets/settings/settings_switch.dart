@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/widgets/settings/settings_tile_style.dart';
 
 class SettingsSwitch extends StatelessWidget {
-  final bool value;
-  final String title;
-  final String? subtitle;
-  final Function(bool) onChanged;
   const SettingsSwitch({
     required this.value,
     required this.title,
@@ -14,28 +10,22 @@ class SettingsSwitch extends StatelessWidget {
     super.key,
   });
 
+  final bool value;
+  final String title;
+  final String? subtitle;
+  final ValueChanged<bool> onChanged;
+
   @override
   Widget build(BuildContext context) {
     return SwitchListTile(
-      title: Text(
-        title,
-        style: Theme.of(context).textTheme.bodyLarge,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: AppStyle.radius12,
-      ),
+      minVerticalPadding: 10,
+      title: Text(title, style: SettingsTileStyle.title(context)),
+      shape: SettingsTileStyle.shape,
       trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
-      //visualDensity: VisualDensity.compact,
-      contentPadding: AppStyle.edgeInsetsL16.copyWith(right: 8),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall!
-                  .copyWith(color: Colors.grey),
-            )
-          : null,
+      contentPadding: SettingsTileStyle.contentPadding,
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle!, style: SettingsTileStyle.subtitle(context)),
       value: value,
       onChanged: onChanged,
     );

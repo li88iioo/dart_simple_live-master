@@ -1,9 +1,10 @@
+import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:canvas_danmaku/canvas_danmaku.dart';
-import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/routes/route_path.dart';
+import 'package:simple_live_app/widgets/glass/slive_page_scaffold.dart';
 import 'package:simple_live_app/widgets/settings/settings_action.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
 import 'package:simple_live_app/widgets/settings/settings_number.dart';
@@ -14,15 +15,16 @@ class DanmuSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return SlivePageScaffold(
       appBar: AppBar(
-        title: const Text("弹幕设置"),
+        title: const Text('弹幕设置'),
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
       ),
-      body: ListView(
-        padding: AppStyle.edgeInsetsA12,
-        children: const [
-          DanmuSettingsView(),
-        ],
+      body: const _SettingsPageBody(
+        children: [DanmuSettingsView()],
       ),
     );
   }
@@ -44,37 +46,34 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 0),
-          child: Text(
-            "弹幕筛选",
-            style: Get.textTheme.titleSmall,
-          ),
+        const _SectionLabel(
+          title: '弹幕筛选',
+          description: '控制关键词、重复内容与虎牙真实礼物消息',
+          first: true,
         ),
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SettingsAction(
-                title: "关键词屏蔽",
+                title: '关键词屏蔽',
                 onTap: onTapDanmuShield ??
                     () => Get.toNamed(RoutePath.kSettingsDanmuShield),
               ),
+              const _SettingsDivider(),
               Obx(
                 () => SettingsSwitch(
-                  title: "弹幕去重",
-                  subtitle: "测试性功能",
+                  title: '弹幕去重',
+                  subtitle: '测试性功能',
                   value: controller.danmakuMaskEnable.value,
-                  onChanged: (e) {
-                    controller.setDanmakuMaskEnable(e);
-                  },
+                  onChanged: controller.setDanmakuMaskEnable,
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsSwitch(
-                  title: "虎牙礼物弹幕",
-                  subtitle: "在播放器弹幕区域显示真实礼物消息和轻量特效",
+                  title: '虎牙礼物弹幕',
+                  subtitle: '在播放器弹幕区域显示真实礼物消息和轻量特效',
                   value: controller.huyaGiftDanmakuEnable.value,
                   onChanged: controller.setHuyaGiftDanmakuEnable,
                 ),
@@ -82,12 +81,9 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-          child: Text(
-            "弹幕设置",
-            style: Get.textTheme.titleSmall,
-          ),
+        const _SectionLabel(
+          title: '显示参数',
+          description: '调整弹幕区域、字号、速度与曲面屏安全边距',
         ),
         SettingsCard(
           child: Column(
@@ -95,163 +91,156 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             children: [
               Obx(
                 () => SettingsSwitch(
-                  title: "默认开关",
+                  title: '默认开关',
                   value: controller.danmuEnable.value,
-                  onChanged: (e) {
-                    controller.setDanmuEnable(e);
-                  },
+                  onChanged: controller.setDanmuEnable,
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "显示区域",
+                  title: '显示区域',
                   value: (controller.danmuArea.value * 100).toInt(),
                   min: 10,
                   max: 100,
                   step: 10,
-                  unit: "%",
-                  onChanged: (e) {
-                    controller.setDanmuArea(e / 100.0);
+                  unit: '%',
+                  onChanged: (value) {
+                    controller.setDanmuArea(value / 100.0);
                     updateDanmuOption(
-                      danmakuController?.option.copyWith(area: e / 100.0),
+                      danmakuController?.option.copyWith(area: value / 100.0),
                     );
                   },
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "不透明度",
+                  title: '不透明度',
                   value: (controller.danmuOpacity.value * 100).toInt(),
                   min: 10,
                   max: 100,
                   step: 10,
-                  unit: "%",
-                  onChanged: (e) {
-                    controller.setDanmuOpacity(e / 100.0);
+                  unit: '%',
+                  onChanged: (value) {
+                    controller.setDanmuOpacity(value / 100.0);
                     updateDanmuOption(
-                      danmakuController?.option.copyWith(opacity: e / 100.0),
+                      danmakuController?.option
+                          .copyWith(opacity: value / 100.0),
                     );
                   },
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "字体大小",
+                  title: '字体大小',
                   value: controller.danmuSize.toInt(),
                   min: 8,
                   max: 48,
-                  onChanged: (e) {
-                    controller.setDanmuSize(e.toDouble());
+                  onChanged: (value) {
+                    controller.setDanmuSize(value.toDouble());
                     updateDanmuOption(
                       danmakuController?.option
-                          .copyWith(fontSize: e.toDouble()),
+                          .copyWith(fontSize: value.toDouble()),
                     );
                   },
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "字体粗细",
+                  title: '字体粗细',
                   value: controller.danmuFontWeight.value,
                   min: 0,
                   max: 8,
                   step: 1,
-                  displayValue: [
-                    "极细",
-                    "很细",
-                    "细",
-                    "正常",
-                    "小粗",
-                    "偏粗",
-                    "粗",
-                    "很粗",
-                    "极粗"
-                  ][controller.danmuFontWeight.value]
-                      .toString(),
-                  onChanged: (e) {
-                    controller.setDanmuFontWeight(e);
+                  displayValue: const [
+                    '极细',
+                    '很细',
+                    '细',
+                    '正常',
+                    '小粗',
+                    '偏粗',
+                    '粗',
+                    '很粗',
+                    '极粗',
+                  ][controller.danmuFontWeight.value],
+                  onChanged: (value) {
+                    controller.setDanmuFontWeight(value);
                     updateDanmuOption(
-                      danmakuController?.option.copyWith(
-                        fontWeight: e,
-                      ),
+                      danmakuController?.option.copyWith(fontWeight: value),
                     );
                   },
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "滚动速度",
-                  subtitle: "弹幕持续时间(秒)，越小速度越快",
+                  title: '滚动速度',
+                  subtitle: '弹幕持续时间（秒），数值越小速度越快',
                   value: controller.danmuSpeed.toInt(),
                   min: 4,
                   max: 20,
-                  onChanged: (e) {
-                    controller.setDanmuSpeed(e.toDouble());
+                  onChanged: (value) {
+                    controller.setDanmuSpeed(value.toDouble());
                     updateDanmuOption(
                       danmakuController?.option
-                          .copyWith(duration: e.toDouble()),
+                          .copyWith(duration: value.toDouble()),
                     );
                   },
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "字体描边",
+                  title: '字体描边',
                   value: controller.danmuStrokeWidth.toInt(),
                   min: 0,
                   max: 10,
-                  onChanged: (e) {
-                    controller.setDanmuStrokeWidth(e.toDouble());
+                  onChanged: (value) {
+                    controller.setDanmuStrokeWidth(value.toDouble());
                     updateDanmuOption(
                       danmakuController?.option
-                          .copyWith(strokeWidth: e.toDouble()),
+                          .copyWith(strokeWidth: value.toDouble()),
                     );
                   },
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "顶部边距",
-                  subtitle: "曲面屏显示不全可设置此选项",
+                  title: '顶部边距',
+                  subtitle: '曲面屏显示不全可设置此选项',
                   value: controller.danmuTopMargin.toInt(),
                   min: 0,
                   max: 48,
                   step: 4,
-                  onChanged: (e) {
-                    controller.setDanmuTopMargin(e.toDouble());
+                  onChanged: (value) {
+                    controller.setDanmuTopMargin(value.toDouble());
                   },
                 ),
               ),
-              AppStyle.divider,
+              const _SettingsDivider(),
               Obx(
                 () => SettingsNumber(
-                  title: "底部边距",
-                  subtitle: "曲面屏显示不全可设置此选项",
+                  title: '底部边距',
+                  subtitle: '曲面屏显示不全可设置此选项',
                   value: controller.danmuBottomMargin.toInt(),
                   min: 0,
                   max: 48,
                   step: 4,
-                  onChanged: (e) {
-                    controller.setDanmuBottomMargin(e.toDouble());
+                  onChanged: (value) {
+                    controller.setDanmuBottomMargin(value.toDouble());
                   },
                 ),
               ),
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-          child: Text(
-            "弹幕去重参数设置",
-            style: Get.textTheme.titleSmall,
-          ),
+        const _SectionLabel(
+          title: '去重参数',
+          description: '控制重复识别窗口、文本归一化与显示频率',
         ),
         SettingsCard(
           child: Column(
@@ -259,53 +248,53 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             children: [
               Obx(
                 () => SettingsNumber(
-                  title: "去重窗口大小(秒)",
+                  title: '去重窗口大小（秒）',
                   value: AppSettingsController.instance.danmuWindowMs.value,
                   step: 1,
                   max: 45,
                   min: 10,
-                  onChanged: (e) {
-                    AppSettingsController.instance.setDanmuWindowMs(e);
-                  },
+                  onChanged: AppSettingsController.instance.setDanmuWindowMs,
                 ),
               ),
+              const _SettingsDivider(),
               Obx(
                 () => SettingsSwitch(
                   value: AppSettingsController
                       .instance.danmuTextNormalization.value,
-                  title: "文本归一化",
-                  onChanged: (e) {
-                    AppSettingsController.instance.setDanmuTextNormalization(e);
-                  },
+                  title: '文本归一化',
+                  onChanged:
+                      AppSettingsController.instance.setDanmuTextNormalization,
                 ),
               ),
-              Obx(
-                () => SettingsSwitch(
-                  value: AppSettingsController
-                      .instance.danmuFrequencyControl.value,
-                  title: "弹幕显示频率",
-                  onChanged: (e) {
-                    AppSettingsController.instance.setDanmuFrequencyControl(e);
-                  },
-                ),
-              ),
-              Obx(
-                () => Visibility(
-                  visible: AppSettingsController
-                      .instance.danmuFrequencyControl.value,
-                  child: SettingsNumber(
-                    title: "显示频率(次)",
-                    value:
-                        AppSettingsController.instance.danmuMaxFrequency.value,
-                    step: 1,
-                    max: 10,
-                    min: 1,
-                    onChanged: (e) {
-                      AppSettingsController.instance.setDanmuMaxFrequency(e);
-                    },
-                  ),
-                ),
-              ),
+              const _SettingsDivider(),
+              Obx(() {
+                final frequencyControl =
+                    AppSettingsController.instance.danmuFrequencyControl.value;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SettingsSwitch(
+                      value: frequencyControl,
+                      title: '弹幕显示频率',
+                      onChanged: AppSettingsController
+                          .instance.setDanmuFrequencyControl,
+                    ),
+                    if (frequencyControl) ...[
+                      const _SettingsDivider(),
+                      SettingsNumber(
+                        title: '显示频率（次）',
+                        value: AppSettingsController
+                            .instance.danmuMaxFrequency.value,
+                        step: 1,
+                        max: 10,
+                        min: 1,
+                        onChanged:
+                            AppSettingsController.instance.setDanmuMaxFrequency,
+                      ),
+                    ],
+                  ],
+                );
+              }),
             ],
           ),
         ),
@@ -316,5 +305,101 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
   void updateDanmuOption(DanmakuOption? option) {
     if (danmakuController == null || option == null) return;
     danmakuController!.updateOption(option);
+  }
+}
+
+class _SettingsPageBody extends StatelessWidget {
+  const _SettingsPageBody({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width =
+              constraints.maxWidth > 760 ? 760.0 : constraints.maxWidth;
+          final horizontalPadding = width < 360 ? 12.0 : 16.0;
+          return Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: width,
+              height: constraints.maxHeight,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  8,
+                  horizontalPadding,
+                  32 + MediaQuery.paddingOf(context).bottom,
+                ),
+                children: children,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({
+    required this.title,
+    this.description,
+    this.first = false,
+  });
+
+  final String title;
+  final String? description;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.sliveColors;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, first ? 4 : 26, 12, 9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          if (description != null) ...[
+            const SizedBox(height: 3),
+            Text(
+              description!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.textTertiary,
+                    height: 1.35,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsDivider extends StatelessWidget {
+  const _SettingsDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 0.5,
+      thickness: 0.5,
+      indent: 16,
+      endIndent: 16,
+      color: context.sliveColors.divider.withValues(
+        alpha: Theme.of(context).brightness == Brightness.dark ? 0.16 : 0.10,
+      ),
+    );
   }
 }

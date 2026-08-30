@@ -1,15 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/widgets/settings/settings_tile_style.dart';
 
 class SettingsMenu<T> extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final Map<T, String> valueMap;
-  final T value;
-  final Widget? trailing;
-
-  final Function(T)? onChanged;
   const SettingsMenu({
     required this.title,
     required this.value,
@@ -20,77 +13,63 @@ class SettingsMenu<T> extends StatelessWidget {
     super.key,
   });
 
+  final String title;
+  final String? subtitle;
+  final Map<T, String> valueMap;
+  final T value;
+  final Widget? trailing;
+  final ValueChanged<T>? onChanged;
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      visualDensity: VisualDensity.compact,
-      title: Text(
-        title,
-        style: Theme.of(context).textTheme.bodyLarge,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: AppStyle.radius12,
-      ),
-      contentPadding: AppStyle.edgeInsetsL16.copyWith(right: 8),
+      minVerticalPadding: 10,
+      title: Text(title, style: SettingsTileStyle.title(context)),
+      shape: SettingsTileStyle.shape,
+      contentPadding: SettingsTileStyle.contentPadding,
       subtitle: subtitle == null
           ? null
-          : Text(
-              subtitle!,
-              style: Get.textTheme.bodySmall!.copyWith(color: Colors.grey),
-            ),
-      trailing: trailing ?? Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            valueMap[value]!.tr,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium!
-                .copyWith(color: Colors.grey),
+          : Text(subtitle!, style: SettingsTileStyle.subtitle(context)),
+      trailing: trailing ??
+          SettingsTileStyle.trailing(
+            context,
+            value: valueMap[value]?.tr ?? '未设置',
           ),
-          AppStyle.hGap4,
-          const Icon(
-            Icons.chevron_right,
-            color: Colors.grey,
-          ),
-        ],
-      ),
       onTap: () => openMenu(context),
     );
   }
 
-  void openMenu(BuildContext context) {
-    showModalBottomSheet(
+  Future<void> openMenu(BuildContext context) {
+    return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
-      ),
-      useSafeArea: true, //useSafeArea似乎无效
-      builder: (_) => SafeArea(
+      useSafeArea: true,
+      builder: (sheetContext) => SafeArea(
         top: false,
         child: SingleChildScrollView(
-          child: RadioGroup(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: RadioGroup<T>(
             groupValue: value,
-            onChanged: (e) {
-              Get.back();
-              onChanged?.call(e as T);
+            onChanged: (nextValue) {
+              if (nextValue == null) return;
+              Navigator.of(sheetContext).pop();
+              onChanged?.call(nextValue);
             },
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: valueMap.keys
+              children: valueMap.entries
                   .map(
-                    (e) => RadioListTile(
-                      value: e,
+                    (entry) => RadioListTile<T>(
+                      value: entry.key,
                       title: Text(
-                        (valueMap[e]?.tr) ?? "???",
-                        style: Get.textTheme.bodyMedium,
+                        entry.value.tr,
+                        style: SettingsTileStyle.title(sheetContext),
                       ),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 16),
                     ),
                   )
-                  .toList(),
+                  .toList(growable: false),
             ),
           ),
         ),

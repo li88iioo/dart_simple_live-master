@@ -158,82 +158,24 @@ class FollowAppSettingsController extends BaseController {
     );
   }
 
-  void editTagDialog(String title, {FollowUserTag? followUserTag}) {
-    final TextEditingController tagEditController =
-        TextEditingController(text: followUserTag?.tag);
-    bool upMode = title == "添加标签" ? true : false;
-    Get.dialog(
-      AlertDialog(
-        contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12.0),
-        ),
-        content: SingleChildScrollView(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(Get.context!).viewInsets.bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                ),
-              ),
-              TextField(
-                controller: tagEditController,
-                minLines: 1,
-                maxLines: 1,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  contentPadding: AppStyle.edgeInsetsA12,
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Colors.grey.withValues(
-                        alpha: .2,
-                      ),
-                    ),
-                  ),
-                ),
-                onSubmitted: (tag) {
-                  upMode
-                      ? addTag(tagEditController.text)
-                      : updateTagName(followUserTag!, tagEditController.text);
-                  Get.back();
-                },
-              ),
-              SizedBox(
-                width: double.infinity,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        Get.back();
-                      },
-                      child: const Text('否'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        upMode
-                            ? addTag(tagEditController.text)
-                            : updateTagName(
-                                followUserTag!,
-                                tagEditController.text,
-                              );
-                        Get.back();
-                      },
-                      child: const Text('是'),
-                    ),
-                  ],
-                ),
-              )
-            ],
-          ),
-        ),
-      ),
+  Future<void> editTagDialog(
+    String title, {
+    FollowUserTag? followUserTag,
+  }) async {
+    final tag = await Utils.showEditTextDialog(
+      followUserTag?.tag ?? '',
+      title: title,
+      hintText: '请输入标签名',
+      confirm: '是',
+      cancel: '否',
     );
+    if (tag == null) return;
+
+    if (title == '添加标签') {
+      addTag(tag);
+    } else {
+      updateTagName(followUserTag!, tag);
+    }
   }
 
   // 关注清理功能

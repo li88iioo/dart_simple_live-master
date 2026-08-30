@@ -1,127 +1,170 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/sites.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/modules/search/search_controller.dart';
 import 'package:simple_live_app/modules/search/search_list_view.dart';
+import 'package:simple_live_app/widgets/glass/slive_glass_icon_button.dart';
+import 'package:simple_live_app/widgets/glass/slive_glass_surface.dart';
+import 'package:simple_live_app/widgets/glass/slive_page_scaffold.dart';
+import 'package:simple_live_app/widgets/navigation/slive_platform_tab_bar.dart';
 
 class SearchPage extends GetView<AppSearchController> {
   const SearchPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final sites = Sites.supportSites;
+
+    return SlivePageScaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        titleSpacing: 12,
-        title: Container(
-          height: 38,
-          decoration: BoxDecoration(
-            color: Get.isDarkMode
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(19),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                onPressed: Get.back,
-                icon: const Icon(Icons.arrow_back, size: 20),
-              ),
-              Obx(
-                () => DropdownButton<int>(
-                  underline: const SizedBox(),
-                  icon: const Icon(Icons.arrow_drop_down, size: 16),
-                  style: TextStyle(
-                    color: Get.theme.textTheme.bodyMedium?.color,
-                    fontSize: 13,
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 0,
-                      child: Text("房间"),
-                    ),
-                    DropdownMenuItem(
-                      value: 1,
-                      child: Text("主播"),
-                    ),
-                  ],
-                  value: controller.searchMode.value,
-                  onChanged: (e) {
-                    controller.searchMode.value = e ?? 0;
-                    controller.doSearch();
-                  },
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: TextField(
-                  controller: controller.searchController,
-                  autofocus: true,
-                  style: const TextStyle(fontSize: 14),
-                  decoration: const InputDecoration(
-                    hintText: "搜点什么吧",
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
-                  ),
-                  onSubmitted: (e) {
-                    controller.doSearch();
-                  },
-                ),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                onPressed: controller.doSearch,
-                icon: const Icon(Icons.search, size: 20),
-              ),
-              const SizedBox(width: 6),
-            ],
-          ),
+        toolbarHeight: 68,
+        titleSpacing: SliveLayout.pageHorizontal,
+        title: Row(
+          children: [
+            SliveGlassIconButton(
+              icon: Icons.arrow_back_rounded,
+              tooltip: '返回',
+              onPressed: () => Get.back(),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _SearchField(controller: controller)),
+          ],
         ),
-        bottom: TabBar(
-          controller: controller.tabController,
-          padding: EdgeInsets.zero,
-          tabAlignment: TabAlignment.center,
-          tabs: Sites.supportSites
-              .map(
-                (e) => Tab(
-                  //text: e.name,
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        e.logo,
-                        width: 24,
-                      ),
-                      AppStyle.hGap8,
-                      Text(e.name),
-                    ],
-                  ),
-                ),
-              )
-              .toList(),
-          labelPadding: AppStyle.edgeInsetsH20,
-          isScrollable: true,
-          indicatorSize: TabBarIndicatorSize.label,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(56),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              SliveLayout.pageHorizontal,
+              2,
+              SliveLayout.pageHorizontal,
+              10,
+            ),
+            child: SlivePlatformTabBar(
+              controller: controller.tabController,
+              sites: sites,
+            ),
+          ),
         ),
       ),
       body: TabBarView(
         physics: const NeverScrollableScrollPhysics(),
         controller: controller.tabController,
-        children: Sites.supportSites
-            .map((e) => SearchListView(
-                      e.id,
-                    )
-                // (e) => e.id == Constant.kDouyin
-                //     ? const DouyinSearchView()
-                //     : SearchListView(
-                //         e.id,
-                //       ),
-                )
-            .toList(),
+        children: sites
+            .map((site) => SearchListView(site.id))
+            .toList(growable: false),
+      ),
+    );
+  }
+}
+
+class _SearchField extends StatelessWidget {
+  const _SearchField({required this.controller});
+
+  final AppSearchController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.sliveColors;
+
+    return SliveGlassSurface(
+      variant: SliveGlassVariant.pill,
+      radius: SliveRadii.pill,
+      enableBackdropBlur: true,
+      constraints: const BoxConstraints(minHeight: 44, maxHeight: 48),
+      child: Row(
+        children: [
+          PopupMenuButton<int>(
+            tooltip: '选择搜索类型',
+            position: PopupMenuPosition.under,
+            onSelected: (value) {
+              controller.searchMode.value = value;
+              controller.doSearch();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 0, child: Text('搜索房间')),
+              PopupMenuItem(value: 1, child: Text('搜索主播')),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 58),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12, right: 5),
+                child: Obx(
+                  () => Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        controller.searchMode.value == 0 ? '房间' : '主播',
+                        maxLines: 1,
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: colors.textSecondary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 17,
+                        color: colors.textTertiary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: 1,
+            height: 20,
+            color: colors.divider.withValues(alpha: 0.18),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: TextField(
+              controller: controller.searchController,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              maxLines: 1,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 14,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
+                hintText: '搜点什么吧',
+                hintStyle: TextStyle(
+                  color: colors.textTertiary,
+                  fontWeight: FontWeight.w500,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 11),
+              ),
+              onSubmitted: (_) => controller.doSearch(),
+            ),
+          ),
+          SizedBox.square(
+            dimension: 42,
+            child: IconButton(
+              tooltip: '搜索',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              onPressed: controller.doSearch,
+              icon: Icon(
+                Icons.search_rounded,
+                color: colors.textPrimary,
+                size: 21,
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+        ],
       ),
     );
   }

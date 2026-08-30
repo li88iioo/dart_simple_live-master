@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/log.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils/permission_handler.dart';
 import 'package:simple_live_app/requests/common_request.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -189,33 +190,33 @@ class Utils {
     required Widget child,
     double maxWidth = 600,
   }) async {
-    var result = await showModalBottomSheet(
+    final result = await showModalBottomSheet(
       context: Get.context!,
-      constraints: BoxConstraints(
-        maxWidth: maxWidth,
-      ),
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      showDragHandle: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(12),
-          topRight: Radius.circular(12),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SliveRadii.panel),
         ),
       ),
-      builder: (_) => Column(
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.only(
-              left: 12,
+      builder: (_) => SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            ListTile(
+              minVerticalPadding: 10,
+              contentPadding: const EdgeInsets.only(left: 16, right: 8),
+              title: Text(title, style: Get.textTheme.titleMedium),
+              trailing: IconButton(
+                tooltip: '关闭',
+                onPressed: Get.back,
+                icon: const Icon(Remix.close_line),
+              ),
             ),
-            title: Text(title),
-            trailing: IconButton(
-              onPressed: Get.back,
-              icon: const Icon(Remix.close_line),
-            ),
-          ),
-          Expanded(
-            child: child,
-          ),
-        ],
+            Expanded(child: child),
+          ],
+        ),
       ),
     );
     return result;
@@ -233,49 +234,17 @@ class Utils {
     String confirm = '',
     String cancel = '',
     TextValidate? validate,
-  }) async {
-    final TextEditingController textEditingController =
-        TextEditingController(text: content);
-    var result = await Get.dialog(
-      AlertDialog(
-        title: Text(title),
-        content: Padding(
-          padding: AppStyle.edgeInsetsT12,
-          child: TextField(
-            controller: textEditingController,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              //prefixText: title,
-              contentPadding: AppStyle.edgeInsetsA12,
-              hintText: hintText ?? title,
-            ),
-            // style: TextStyle(
-            //     height: 1.0,
-            //     color: Get.isDarkMode ? Colors.white : Colors.black),
-            autofocus: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: const Text("取消"),
-          ),
-          TextButton(
-            onPressed: () {
-              if (validate != null && !validate(textEditingController.text)) {
-                return;
-              }
-
-              Get.back(result: textEditingController.text);
-            },
-            child: const Text("确定"),
-          ),
-        ],
+  }) {
+    return Get.dialog<String>(
+      _EditTextDialog(
+        content: content,
+        title: title,
+        hintText: hintText,
+        confirm: confirm,
+        cancel: cancel,
+        validate: validate,
       ),
-      // barrierColor:
-      //     Get.isDarkMode ? Colors.grey.withOpacity(.3) : Colors.black38,
     );
-    return result;
   }
 
   static Future<T?> showOptionDialog<T>(
@@ -585,5 +554,80 @@ class Utils {
       return "${(size / 1024 / 1024).toStringAsFixed(2)} MB";
     }
     return "${(size / 1024 / 1024 / 1024).toStringAsFixed(2)} GB";
+  }
+}
+
+class _EditTextDialog extends StatefulWidget {
+  const _EditTextDialog({
+    required this.content,
+    required this.title,
+    required this.confirm,
+    required this.cancel,
+    this.hintText,
+    this.validate,
+  });
+
+  final String content;
+  final String title;
+  final String? hintText;
+  final String confirm;
+  final String cancel;
+  final TextValidate? validate;
+
+  @override
+  State<_EditTextDialog> createState() => _EditTextDialogState();
+}
+
+class _EditTextDialogState extends State<_EditTextDialog> {
+  late final TextEditingController _textEditingController;
+
+  @override
+  void initState() {
+    super.initState();
+    _textEditingController = TextEditingController(text: widget.content);
+  }
+
+  @override
+  void dispose() {
+    _textEditingController.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    final text = _textEditingController.text;
+    if (widget.validate != null && !widget.validate!(text)) {
+      return;
+    }
+    Navigator.of(context).pop(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Padding(
+        padding: AppStyle.edgeInsetsT12,
+        child: TextField(
+          controller: _textEditingController,
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            contentPadding: AppStyle.edgeInsetsA12,
+            hintText: widget.hintText ?? widget.title,
+          ),
+          autofocus: true,
+          onSubmitted: (_) => _confirm(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(widget.cancel.isEmpty ? '取消' : widget.cancel),
+        ),
+        TextButton(
+          onPressed: _confirm,
+          child: Text(widget.confirm.isEmpty ? '确定' : widget.confirm),
+        ),
+      ],
+    );
   }
 }

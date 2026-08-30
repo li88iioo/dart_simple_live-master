@@ -28,6 +28,10 @@ void main() {
     expect(theme.scaffoldBackgroundColor, colors.backgroundBase);
     expect(materials.mode, SliveGlassMode.clear);
     expect(materials.backdropBlur, greaterThan(30));
+    expect(theme.bottomSheetTheme.showDragHandle, isTrue);
+    expect(theme.bottomSheetTheme.modalElevation, 0);
+    expect(theme.dialogTheme.elevation, 0);
+    expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
   });
 
   test('柔和材质比通透材质遮罩更高且模糊更低', () {
