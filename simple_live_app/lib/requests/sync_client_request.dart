@@ -1,6 +1,7 @@
 import 'package:simple_live_app/models/sync_client_info_model.dart';
 import 'package:simple_live_app/requests/http_client.dart';
 import 'package:simple_live_app/services/local_sync_endpoint.dart';
+import 'package:simple_live_app/services/local_sync_protocol.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 
 class SyncClientRequest {
@@ -10,7 +11,14 @@ class SyncClientRequest {
       url,
       header: _authHeaders(client),
     );
-    return SyncClientInfoModel.fromJson(data);
+    final info = SyncClientInfoModel.fromJson(data);
+    LocalSyncProtocol.ensureCompatible(
+      peerVersion: info.protocolVersion,
+      peerMinimumVersion: info.minimumProtocolVersion,
+      authRequired: info.authRequired,
+      capabilities: info.capabilities,
+    );
+    return info;
   }
 
   Future<bool> syncFollow(
@@ -22,6 +30,23 @@ class SyncClientRequest {
       client,
       path: '/sync/follow',
       body: body,
+      overlay: overlay,
+    );
+  }
+
+  Future<bool> syncFollowBundle(
+    SyncClinet client, {
+    required dynamic follows,
+    required dynamic tags,
+    bool overlay = false,
+  }) {
+    return _syncList(
+      client,
+      path: '/sync/follow_bundle',
+      body: {
+        'follows': follows,
+        'tags': tags,
+      },
       overlay: overlay,
     );
   }

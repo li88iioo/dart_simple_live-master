@@ -412,19 +412,44 @@ class AppSettingsController extends GetxController {
 
   RxSet<String> shieldList = <String>{}.obs;
 
-  void addShieldList(String e) {
-    shieldList.add(e);
-    LocalStorageService.instance.shieldBox.put(e, e);
+  Future<void> addShieldList(String value) {
+    return mergeShieldList([value], overlay: false);
   }
 
-  void removeShieldList(String e) {
-    shieldList.remove(e);
-    LocalStorageService.instance.shieldBox.delete(e);
+  Future<void> removeShieldList(String value) {
+    return mergeShieldList(
+      LocalStorageService.instance.shieldBox.values
+          .where((item) => item != value),
+      overlay: true,
+    );
   }
 
-  Future clearShieldList() async {
-    shieldList.clear();
-    await LocalStorageService.instance.shieldBox.clear();
+  Future<void> clearShieldList() {
+    return mergeShieldList(const [], overlay: true);
+  }
+
+  Future<void> mergeShieldList(
+    Iterable<String> values, {
+    required bool overlay,
+  }) {
+    return LocalStorageService.instance.synchronizedWrite(() async {
+      final target = overlay
+          ? values.toSet()
+          : {...LocalStorageService.instance.shieldBox.values, ...values};
+      final targetMap = {for (final value in target) value: value};
+      if (targetMap.isNotEmpty) {
+        await LocalStorageService.instance.shieldBox.putAll(targetMap);
+      }
+      // 无论是否覆盖，都把历史的自增数字键迁移为“关键词即键”的规范格式。
+      // 非覆盖模式的 target 已包含全部旧值，因此删除非规范键不会丢数据。
+      final staleKeys = LocalStorageService.instance.shieldBox.keys
+          .where((key) => key is! String || !target.contains(key))
+          .toList();
+      if (staleKeys.isNotEmpty) {
+        await LocalStorageService.instance.shieldBox.deleteAll(staleKeys);
+      }
+      shieldList.assignAll(target);
+    });
   }
 
   void setScaleMode(int value) {

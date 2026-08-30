@@ -878,13 +878,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   void showDanmuShield() {
     TextEditingController keywordController = TextEditingController();
 
-    void addKeyword() {
+    Future<void> addKeyword() async {
       if (keywordController.text.isEmpty) {
         SmartDialog.showToast("请输入关键词");
         return;
       }
 
-      AppSettingsController.instance
+      await AppSettingsController.instance
           .addShieldList(keywordController.text.trim());
       keywordController.text = "";
     }
@@ -926,8 +926,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
                   .map(
                     (item) => InkWell(
                       borderRadius: AppStyle.radius24,
-                      onTap: () {
-                        AppSettingsController.instance.removeShieldList(item);
+                      onTap: () async {
+                        await AppSettingsController.instance
+                            .removeShieldList(item);
                       },
                       child: Container(
                         decoration: BoxDecoration(

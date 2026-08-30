@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 import 'package:hive_ce/hive_ce.dart';
 import 'package:simple_live_app/app/log.dart';
+import 'package:synchronized/synchronized.dart';
 
 class LocalStorageService extends GetxService {
   static LocalStorageService get instance => Get.find<LocalStorageService>();
@@ -231,6 +234,8 @@ class LocalStorageService extends GetxService {
   late Box settingsBox;
   late Box<String> shieldBox;
 
+  final Lock _writeLock = Lock();
+
   Future init() async {
     settingsBox = await Hive.openBox(
       "LocalStorage",
@@ -238,6 +243,10 @@ class LocalStorageService extends GetxService {
     shieldBox = await Hive.openBox(
       "DanmuShield",
     );
+  }
+
+  Future<T> synchronizedWrite<T>(FutureOr<T> Function() action) {
+    return _writeLock.synchronized(action);
   }
 
   T getValue<T>(dynamic key, T defaultValue) {

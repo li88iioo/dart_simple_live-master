@@ -34,7 +34,7 @@ class HistoryService extends GetxService {
     _updateHistory();
     _stopwatch.reset();
     History? history = DBService.instance.getHistory(roomId);
-    if(history != null){
+    if (history != null) {
       _loadHistory(history);
     }
   }
@@ -105,6 +105,6 @@ class HistoryService extends GetxService {
   }
 
   Future<void> historyClear() async {
-    await DBService.instance.historyBox.clear();
+    await DBService.instance.clearHistory();
   }
 }

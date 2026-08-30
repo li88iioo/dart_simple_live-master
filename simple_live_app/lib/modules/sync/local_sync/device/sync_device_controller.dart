@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/controller/base_controller.dart';
@@ -14,7 +12,8 @@ class SyncDeviceController extends BaseController {
   final SyncClinet client;
   final SyncClientInfoModel info;
   SyncDeviceController({required this.client, required this.info});
-  SyncClientRequest request = SyncClientRequest();
+  final SyncClientRequest request = SyncClientRequest();
+  bool _syncing = false;
 
   Future<bool> showOverlayDialog() async {
     var overlay = await Utils.showAlertDialog(
@@ -26,32 +25,40 @@ class SyncDeviceController extends BaseController {
     return overlay;
   }
 
-  void syncFollowAndTag() async {
+  Future<void> syncFollowAndTag() async {
+    if (!_beginSync()) return;
+
     try {
       var overlay = await showOverlayDialog();
       SmartDialog.showLoading(msg: "同步中...");
-      var users = DBService.instance.getFollowList();
-      var tags = DBService.instance.getFollowTagList();
-      var data = json.encode(users.map((e) => e.toJson()).toList());
-      var dataT = json.encode(tags.map((e) => e.toJson()).toList());
-      await request.syncFollow(client, data, overlay: overlay);
-      // 标签和关注必须同时同步
-      await request.syncTag(client, dataT, overlay: overlay);
+      final users = DBService.instance.getAllFollowList();
+      final tags = DBService.instance.getFollowTagList();
+      final followData = users.map((item) => item.toJson()).toList();
+      final tagData = tags.map((item) => item.toJson()).toList();
+      await request.syncFollowBundle(
+        client,
+        follows: followData,
+        tags: tagData,
+        overlay: overlay,
+      );
       SmartDialog.showToast("已同步关注列表和标签");
     } catch (e) {
       SmartDialog.showToast("同步失败:$e");
       Log.logPrint(e);
     } finally {
       SmartDialog.dismiss();
+      _syncing = false;
     }
   }
 
-  void syncHistory() async {
+  Future<void> syncHistory() async {
+    if (!_beginSync()) return;
+
     try {
       var overlay = await showOverlayDialog();
       SmartDialog.showLoading(msg: "同步中...");
-      var histores = DBService.instance.getHistories();
-      var data = json.encode(histores.map((e) => e.toJson()).toList());
+      final histories = DBService.instance.getHistories();
+      final data = histories.map((item) => item.toJson()).toList();
       await request.syncHistory(client, data, overlay: overlay);
       SmartDialog.showToast("已同步历史记录");
     } catch (e) {
@@ -59,22 +66,38 @@ class SyncDeviceController extends BaseController {
       Log.logPrint(e);
     } finally {
       SmartDialog.dismiss();
+      _syncing = false;
     }
   }
 
-  void syncBlockedWord() async {
+  Future<void> syncBlockedWord() async {
+    if (!_beginSync()) return;
+
     try {
       var overlay = await showOverlayDialog();
       SmartDialog.showLoading(msg: "同步中...");
-      var shieldList = AppSettingsController.instance.shieldList;
-      var data = json.encode(shieldList.toList());
-      await request.syncBlockedWord(client, data, overlay: overlay);
+      final shieldList = AppSettingsController.instance.shieldList;
+      await request.syncBlockedWord(
+        client,
+        shieldList.toList(),
+        overlay: overlay,
+      );
       SmartDialog.showToast("已同步屏蔽词");
     } catch (e) {
       SmartDialog.showToast("同步失败:$e");
       Log.logPrint(e);
     } finally {
       SmartDialog.dismiss();
+      _syncing = false;
     }
+  }
+
+  bool _beginSync() {
+    if (_syncing) {
+      SmartDialog.showToast('已有同步任务正在进行');
+      return false;
+    }
+    _syncing = true;
+    return true;
   }
 }

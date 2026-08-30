@@ -19,17 +19,14 @@ class HistorySyncResource implements SyncResource<List<History>> {
     final file = archive.findFile(fileName);
     if (file == null) return null;
     final jsonData = jsonDecode(utf8.decode(file.content));
-    return (jsonData['data'] as List)
-        .map((e) => History.fromJson(e))
-        .toList();
+    return (jsonData['data'] as List).map((e) => History.fromJson(e)).toList();
   }
 
   @override
   Future<void> saveLocal(List<History> data) async {
-    await DBService.instance.historyBox.clear();
-    for (var item in data) {
-      await DBService.instance.addOrUpdateHistory(item);
-    }
+    await DBService.instance.replaceHistories({
+      for (final item in data) item.id: item,
+    });
   }
 
   @override
@@ -55,7 +52,8 @@ class HistorySyncResource implements SyncResource<List<History>> {
         continue;
       }
 
-      final remoteSeconds = remoteItem.watchDuration?.toDuration().inSeconds ?? 0;
+      final remoteSeconds =
+          remoteItem.watchDuration?.toDuration().inSeconds ?? 0;
       final localSyncSeconds = localItem.syncDuration;
 
       // 如果远端时长和本地基础时长一致，取更新时间新的

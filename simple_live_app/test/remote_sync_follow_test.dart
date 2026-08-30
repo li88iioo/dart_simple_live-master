@@ -46,6 +46,34 @@ void main() {
     expect(result.follows.map((item) => item.id), contains(oldFollow.id));
   });
 
+  test('同步点之前的单边墓碑仍会永久保留', () async {
+    await storage.settingsBox.put(
+      LocalStorageService.kWebDAVLastRecoverTime,
+      DateTime.utc(2026, 8, 1).millisecondsSinceEpoch,
+    );
+    final resource = FollowSyncResource();
+    final oldTombstone = _follow(
+      id: 'huya_deleted',
+      addTime: DateTime.utc(2026, 6, 1),
+      deleted: true,
+      updateTime: DateTime.utc(2026, 7, 1).millisecondsSinceEpoch,
+    );
+
+    final localOnly = resource.merge(
+      FollowBundle(follows: [oldTombstone]),
+      FollowBundle(),
+    );
+    final remoteOnly = resource.merge(
+      FollowBundle(),
+      FollowBundle(follows: [oldTombstone]),
+    );
+
+    expect(localOnly.follows.single.id, oldTombstone.id);
+    expect(localOnly.follows.single.deleted, isTrue);
+    expect(remoteOnly.follows.single.id, oldTombstone.id);
+    expect(remoteOnly.follows.single.deleted, isTrue);
+  });
+
   test('已有恢复时间时仍会过滤同步点之前的单边记录', () async {
     await storage.settingsBox.put(
       LocalStorageService.kWebDAVLastRecoverTime,
@@ -69,6 +97,8 @@ void main() {
 FollowUser _follow({
   required String id,
   required DateTime addTime,
+  bool deleted = false,
+  int updateTime = 0,
 }) {
   return FollowUser(
     id: id,
@@ -77,5 +107,7 @@ FollowUser _follow({
     userName: id,
     face: '',
     addTime: addTime,
+    deleted: deleted,
+    updateTime: updateTime,
   );
 }

@@ -12,6 +12,7 @@ import 'package:simple_live_app/requests/sync_client_request.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/services/local_sync_endpoint.dart';
+import 'package:simple_live_app/services/local_sync_protocol.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 
 class LocalSyncController extends BaseController {
@@ -132,6 +133,10 @@ class LocalSyncController extends BaseController {
       if (!_active) return;
 
       await AppNavigator.toSyncDevice(pairedClient, info);
+    } on LocalSyncProtocolException catch (error) {
+      if (_active) {
+        SmartDialog.showToast(error.message);
+      }
     } catch (error) {
       if (_active) {
         SmartDialog.showToast('连接失败，请检查地址和配对码');

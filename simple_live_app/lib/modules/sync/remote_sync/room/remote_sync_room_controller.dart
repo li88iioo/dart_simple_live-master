@@ -16,6 +16,7 @@ import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
+import 'package:simple_live_app/services/local_sync_data_merger.dart';
 import 'package:simple_live_app/services/signalr_service.dart';
 
 class RemoteSyncRoomController extends BaseController {
@@ -123,17 +124,25 @@ class RemoteSyncRoomController extends BaseController {
 
   void onReceiveFavorite(bool overlay, String data) async {
     try {
-      var jsonBody = json.decode(data);
+      final jsonBody = json.decode(data) as List;
+      final users = jsonBody
+          .map((item) => FollowUser.fromJson(item))
+          .toList(growable: false);
+      final userMap = {for (final user in users) user.id: user};
       if (overlay) {
-        await DBService.instance.followBox.clear();
+        await DBService.instance.replaceFollows(userMap);
+      } else {
+        await DBService.instance.synchronizedWrite(() async {
+          final target = LocalSyncDataMerger.follows(
+            existing: DBService.instance.followBox.values,
+            incoming: users,
+            overlay: false,
+          );
+          await DBService.instance.followBox.putAll(target);
+        });
       }
-      for (var item in jsonBody) {
-        var user = FollowUser.fromJson(item);
-        await DBService.instance.followBox.put(user.id, user);
-      }
-      SmartDialog.showToast('已同步关注用户列表');
       EventBus.instance.emit(Constant.kUpdateFollow, 0);
-      SmartDialog.showToast("已同步关注列表");
+      SmartDialog.showToast('已同步关注列表');
     } catch (e) {
       SmartDialog.showToast("同步失败:$e");
       Log.logPrint(e);
@@ -142,20 +151,27 @@ class RemoteSyncRoomController extends BaseController {
 
   void onReceiveHistory(bool overlay, String data) async {
     try {
-      var jsonBody = json.decode(data);
+      final jsonBody = json.decode(data) as List;
+      final histories = jsonBody
+          .map((item) => History.fromJson(item))
+          .toList(growable: false);
       if (overlay) {
-        await DBService.instance.historyBox.clear();
-      }
-      for (var item in jsonBody) {
-        var history = History.fromJson(item);
-        if (DBService.instance.historyBox.containsKey(history.id)) {
-          var old = DBService.instance.historyBox.get(history.id);
-          //如果本地的更新时间比较新，就不更新
-          if (old!.updateTime.isAfter(history.updateTime)) {
-            continue;
+        await DBService.instance.replaceHistories({
+          for (final history in histories) history.id: history,
+        });
+      } else {
+        await DBService.instance.synchronizedWrite(() async {
+          final updates = <String, History>{};
+          for (final history in histories) {
+            final old = DBService.instance.historyBox.get(history.id);
+            if (old == null || !old.updateTime.isAfter(history.updateTime)) {
+              updates[history.id] = history;
+            }
           }
-        }
-        await DBService.instance.addOrUpdateHistory(history);
+          if (updates.isNotEmpty) {
+            await DBService.instance.historyBox.putAll(updates);
+          }
+        });
       }
       SmartDialog.showToast('已同步历史记录');
       EventBus.instance.emit(Constant.kUpdateHistory, 0);
@@ -167,14 +183,11 @@ class RemoteSyncRoomController extends BaseController {
 
   void onReceiveShieldWord(bool overlay, String data) async {
     try {
-      var jsonBody = json.decode(data);
-      if (overlay) {
-        AppSettingsController.instance.clearShieldList();
-      }
-      for (var item in jsonBody) {
-        // add to Hive
-        AppSettingsController.instance.addShieldList(item);
-      }
+      final jsonBody = json.decode(data) as List;
+      await AppSettingsController.instance.mergeShieldList(
+        jsonBody.cast<String>(),
+        overlay: overlay,
+      );
       SmartDialog.showToast('已同步屏蔽词');
     } catch (e) {
       SmartDialog.showToast("同步失败:$e");

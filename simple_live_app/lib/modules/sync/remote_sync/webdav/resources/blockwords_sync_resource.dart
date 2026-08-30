@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:archive/archive.dart';
+import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/interface/sync_resource.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 
@@ -22,8 +23,10 @@ class BlockwordsSyncResource implements SyncResource<List<String>> {
 
   @override
   Future<void> saveLocal(List<String> data) async {
-    await LocalStorageService.instance.shieldBox.clear();
-    await LocalStorageService.instance.shieldBox.addAll(data);
+    await AppSettingsController.instance.mergeShieldList(
+      data,
+      overlay: true,
+    );
   }
 
   @override

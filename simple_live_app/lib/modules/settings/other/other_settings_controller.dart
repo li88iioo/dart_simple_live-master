@@ -91,7 +91,7 @@ class OtherSettingsController extends BaseController {
     super.onInit();
   }
 
-  void setFirebaseEnable(bool e){
+  void setFirebaseEnable(bool e) {
     AppSettingsController.instance.setFirebaseEnable(e);
     FirebaseService.setCrashlytics(e);
   }
@@ -218,11 +218,36 @@ class OtherSettingsController extends BaseController {
           !await Utils.showAlertDialog("导入配置文件平台不匹配,是否继续导入?", title: "平台不匹配")) {
         return;
       }
-      LocalStorageService.instance.settingsBox.clear();
-      LocalStorageService.instance.shieldBox.clear();
-      LocalStorageService.instance.settingsBox.putAll(data["config"]);
-      LocalStorageService.instance.shieldBox
-          .putAll(data["shield"].cast<String, String>());
+      final config = Map<dynamic, dynamic>.from(data["config"] as Map);
+      final rawShield = Map<dynamic, dynamic>.from(data["shield"] as Map);
+      if (rawShield.values.any((value) => value is! String)) {
+        throw const FormatException("屏蔽词配置格式无效");
+      }
+      final shield = {
+        for (final value in rawShield.values.cast<String>()) value: value,
+      };
+      await LocalStorageService.instance.synchronizedWrite(() async {
+        final settingsBox = LocalStorageService.instance.settingsBox;
+        final shieldBox = LocalStorageService.instance.shieldBox;
+
+        if (config.isNotEmpty) {
+          await settingsBox.putAll(config);
+        }
+        if (shield.isNotEmpty) {
+          await shieldBox.putAll(shield);
+        }
+
+        final staleShieldKeys =
+            shieldBox.keys.where((key) => !shield.containsKey(key)).toList();
+        if (staleShieldKeys.isNotEmpty) {
+          await shieldBox.deleteAll(staleShieldKeys);
+        }
+        final staleSettingKeys =
+            settingsBox.keys.where((key) => !config.containsKey(key)).toList();
+        if (staleSettingKeys.isNotEmpty) {
+          await settingsBox.deleteAll(staleSettingKeys);
+        }
+      });
       SmartDialog.showToast("导入成功,重启生效");
     } catch (e) {
       Log.logPrint(e);
@@ -230,14 +255,15 @@ class OtherSettingsController extends BaseController {
     }
   }
 
-  void resetDefaultConfig() {
-    Utils.showAlertDialog("是否重置所有配置为默认值?").then((value) {
-      if (value) {
-        LocalStorageService.instance.settingsBox.clear();
-        LocalStorageService.instance.shieldBox.clear();
-        SmartDialog.showToast("重置成功,重启生效");
-      }
+  Future<void> resetDefaultConfig() async {
+    final confirmed = await Utils.showAlertDialog("是否重置所有配置为默认值?");
+    if (!confirmed) return;
+
+    await LocalStorageService.instance.synchronizedWrite(() async {
+      await LocalStorageService.instance.settingsBox.clear();
+      await LocalStorageService.instance.shieldBox.clear();
     });
+    SmartDialog.showToast("重置成功,重启生效");
   }
 }
 

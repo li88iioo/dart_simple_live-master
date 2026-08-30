@@ -65,7 +65,7 @@ class FollowUser implements Mappable {
   @HiveField(12, defaultValue: false)
   bool deleted;
 
-  /// 墓碑更新时间（秒级时间戳），用于定期清理
+  /// 墓碑更新时间。新版使用毫秒时间戳；同步时兼容旧版秒级值。
   @HiveField(13, defaultValue: 0)
   int updateTime;
 

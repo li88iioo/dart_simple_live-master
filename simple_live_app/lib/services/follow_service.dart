@@ -80,7 +80,6 @@ class FollowService extends GetxService {
     });
     await initFollowList();
     initTimer();
-    cleanupTombstones();
     super.onInit();
   }
 
@@ -264,7 +263,7 @@ class FollowService extends GetxService {
     liveListSort();
     // 设置墓碑标记，而非直接删除记录
     follow.deleted = true;
-    follow.updateTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    follow.updateTime = DateTime.now().millisecondsSinceEpoch;
     await DBService.instance.addFollow(follow);
   }
 
@@ -321,7 +320,8 @@ class FollowService extends GetxService {
       return;
     }
     var followSnapshot = AppSettingsController.instance.followSnapshot;
-    bool followSnapshotEnable = AppSettingsController.instance.followSnapshotEnable.value;
+    bool followSnapshotEnable =
+        AppSettingsController.instance.followSnapshotEnable.value;
     // whether to recover snapshot depends on expireAt
     if (followSnapshot != null &&
         followSnapshot.expireAt > DateTime.now().microsecondsSinceEpoch &&
@@ -336,10 +336,11 @@ class FollowService extends GetxService {
         }
       }
       _snap = true;
-      Log.i("FollowService: follow-snapshot has recovered, expireAt: ${followSnapshot.expireAt}");
+      Log.i(
+          "FollowService: follow-snapshot has recovered, expireAt: ${followSnapshot.expireAt}");
     }
     followList.assignAll(list);
-    if(_snap){
+    if (_snap) {
       liveListSort();
     }
     getAllTagList();
@@ -347,7 +348,7 @@ class FollowService extends GetxService {
 
   Future<void> loadData({bool updateStatus = true, int? cycle}) async {
     // snapshot 恢复跳过第一次状态更新
-    if(_snap){
+    if (_snap) {
       _snap = false;
       return;
     }
@@ -460,8 +461,10 @@ class FollowService extends GetxService {
     await pool.close();
 
     // frequency of snapshot-saving and expireAt calculation depend on user-setting: auto-update
-    final minutes = AppSettingsController.instance.autoUpdateFollowDuration.value;
-    final expireAt = DateTime.now().add(Duration(minutes: minutes)).microsecondsSinceEpoch;
+    final minutes =
+        AppSettingsController.instance.autoUpdateFollowDuration.value;
+    final expireAt =
+        DateTime.now().add(Duration(minutes: minutes)).microsecondsSinceEpoch;
     AppSettingsController.instance.setFollowSnapshot(
       FollowSnapshot(
         expireAt: expireAt,
@@ -769,22 +772,9 @@ class FollowService extends GetxService {
       );
       res[followUserTag.id] = followUserTag;
     }
-    await DBService.instance.tagBox.clear();
-    await DBService.instance.tagBox.putAll(res);
+    await DBService.instance.replaceFollowTags(res);
     Log.i(
         "Follow-Service: data check down，follows:${followUserListTemp.length}，tags:${tagMap.length}");
-  }
-
-  /// 清理墓碑记录：删除 updateTime 超过15天的墓碑
-  Future<void> cleanupTombstones() async {
-    // 墓碑保留15天 = 15 * 24 * 60 * 60 秒
-    const int tombstoneTTL = 15 * 24 * 60 * 60;
-    final beforeTimestamp =
-        (DateTime.now().millisecondsSinceEpoch ~/ 1000) - tombstoneTTL;
-    final count = await DBService.instance.cleanupTombstones(beforeTimestamp);
-    if (count > 0) {
-      Log.i("Follow-Service: cleaned $count tombstone records");
-    }
   }
 
   @override
