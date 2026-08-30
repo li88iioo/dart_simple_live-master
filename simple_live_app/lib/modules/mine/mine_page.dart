@@ -169,7 +169,7 @@ class MinePage extends StatelessWidget {
                             subtitle: const _TileSubtitle('查看项目源码与发布信息'),
                             onTap: () {
                               launchUrlString(
-                                'https://github.com/slotsun/dart_simple_live',
+                                'https://github.com/li88iioo/dart_simple_live-master',
                                 mode: LaunchMode.externalApplication,
                               );
                             },

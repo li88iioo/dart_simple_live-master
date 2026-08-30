@@ -30,7 +30,9 @@ void main() {
   final version = (map['version'] ?? '').toString();
   final desc = (map['version_desc'] ?? '').toString();
 
-  final date = DateTime.now().toIso8601String().split('T').first;
+  final date =
+      Platform.environment['RELEASE_DATE'] ??
+      DateTime.now().toIso8601String().split('T').first;
 
   final releaseBlock = [
     '    <release version="$version" date="$date">',

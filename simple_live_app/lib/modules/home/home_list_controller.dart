@@ -11,6 +11,9 @@ class HomeListController extends BasePageController<LiveRoomItem> {
     if (_initialLoadRequested || list.isNotEmpty || loadding) return;
     _initialLoadRequested = true;
     await refreshData();
+    if (list.isEmpty && pageError.value) {
+      _initialLoadRequested = false;
+    }
   }
 
   @override

@@ -39,9 +39,9 @@
 
 只保证Android, Linux和Windows可用性
 
-请到[Releases](https://github.com/slotsun/dart_simple_live/releases)下载最新版本，iOS请到上游或者action下载体验
+请到[Releases](https://github.com/li88iioo/dart_simple_live-master/releases)下载最新版本，iOS请到上游或者action下载体验
 
-如果想体验最新功能，可前往[Actions](https://github.com/slotsun/dart_simple_live/actions)下载自动打包的开发版本
+如果想体验最新功能，可前往[Actions](https://github.com/li88iioo/dart_simple_live-master/actions)下载自动打包的开发版本
 
 Windows建议下载UWP版[聚合直播](https://www.microsoft.com/store/apps/9N1TWG2G84VD)，体验会更好
 
