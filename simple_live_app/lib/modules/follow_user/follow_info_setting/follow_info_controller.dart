@@ -219,4 +219,10 @@ class FollowInfoController extends BasePageController<FollowUser> {
     followUser.value = newFollow;
     _initMigrationSites();
   }
+
+  @override
+  void onClose() {
+    migrationUrlController.dispose();
+    super.onClose();
+  }
 }

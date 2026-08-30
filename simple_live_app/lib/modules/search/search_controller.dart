@@ -85,6 +85,13 @@ class AppSearchController extends GetxController
   @override
   void onClose() {
     streamSubscription?.cancel();
+    tabController.dispose();
+    searchController.dispose();
+    for (final site in Sites.supportSites) {
+      if (Get.isRegistered<SearchListController>(tag: site.id)) {
+        Get.delete<SearchListController>(tag: site.id, force: true);
+      }
+    }
     super.onClose();
   }
 }

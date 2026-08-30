@@ -111,6 +111,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   var countdown = 60.obs;
 
   Timer? autoExitTimer;
+  Timer? _autoExitGraceTimer;
 
   /// 设置的自动关闭时间（分钟）
   var autoExitMinutes = 60.obs;
@@ -249,32 +250,45 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   }
 
   void setAutoExit() {
-    if (!autoExitEnable.value) {
-      autoExitTimer?.cancel();
-      return;
-    }
     autoExitTimer?.cancel();
+    autoExitTimer = null;
+    _autoExitGraceTimer?.cancel();
+    _autoExitGraceTimer = null;
+    if (!autoExitEnable.value) return;
+
     countdown.value = autoExitMinutes.value * 60;
     autoExitTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       countdown.value -= 1;
-      if (countdown.value <= 0) {
-        timer = Timer(const Duration(seconds: 10), () async {
-          await WakelockPlus.disable();
-          exit(0);
-        });
-        autoExitTimer?.cancel();
-        var delay = await Utils.showAlertDialog("定时关闭已到时,是否延迟关闭?",
-            title: "延迟关闭", confirm: "延迟", cancel: "关闭", selectable: true);
-        if (delay) {
-          timer.cancel();
-          delayAutoExit.value = true;
-          showAutoExitSheet();
-          setAutoExit();
-        } else {
-          delayAutoExit.value = false;
-          await WakelockPlus.disable();
-          exit(0);
-        }
+      if (countdown.value > 0) return;
+
+      timer.cancel();
+      autoExitTimer = null;
+      _autoExitGraceTimer = Timer(const Duration(seconds: 10), () async {
+        await WakelockPlus.disable();
+        exit(0);
+      });
+      final delay = await Utils.showAlertDialog(
+        "定时关闭已到时,是否延迟关闭?",
+        title: "延迟关闭",
+        confirm: "延迟",
+        cancel: "关闭",
+        selectable: true,
+      );
+      if (isClosed) {
+        _autoExitGraceTimer?.cancel();
+        _autoExitGraceTimer = null;
+        return;
+      }
+      if (delay) {
+        _autoExitGraceTimer?.cancel();
+        _autoExitGraceTimer = null;
+        delayAutoExit.value = true;
+        showAutoExitSheet();
+        setAutoExit();
+      } else {
+        delayAutoExit.value = false;
+        await WakelockPlus.disable();
+        exit(0);
       }
     });
   }
@@ -951,81 +965,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   }
 
   void showDanmuShield() {
-    TextEditingController keywordController = TextEditingController();
-
-    Future<void> addKeyword() async {
-      if (keywordController.text.isEmpty) {
-        SmartDialog.showToast("请输入关键词");
-        return;
-      }
-
-      await AppSettingsController.instance
-          .addShieldList(keywordController.text.trim());
-      keywordController.text = "";
-    }
-
     Utils.showBottomSheet(
       title: "关键词屏蔽",
-      child: ListView(
-        padding: AppStyle.edgeInsetsA12,
-        children: [
-          TextField(
-            controller: keywordController,
-            decoration: InputDecoration(
-              contentPadding: AppStyle.edgeInsetsH12,
-              border: const OutlineInputBorder(),
-              hintText: "请输入关键词",
-              suffixIcon: TextButton.icon(
-                onPressed: addKeyword,
-                icon: const Icon(Icons.add),
-                label: const Text("添加"),
-              ),
-            ),
-            onSubmitted: (e) {
-              addKeyword();
-            },
-          ),
-          AppStyle.vGap12,
-          Obx(
-            () => Text(
-              "已添加${AppSettingsController.instance.shieldList.length}个关键词（点击移除）",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
-          AppStyle.vGap12,
-          Obx(
-            () => Wrap(
-              runSpacing: 12,
-              spacing: 12,
-              children: AppSettingsController.instance.shieldList
-                  .map(
-                    (item) => InkWell(
-                      borderRadius: AppStyle.radius24,
-                      onTap: () async {
-                        await AppSettingsController.instance
-                            .removeShieldList(item);
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: AppStyle.radius24,
-                        ),
-                        padding: AppStyle.edgeInsetsH12.copyWith(
-                          top: 4,
-                          bottom: 4,
-                        ),
-                        child: Text(
-                          item,
-                          style: Get.textTheme.bodyMedium,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
-      ),
+      child: const _DanmuShieldSheet(),
     );
   }
 
@@ -1218,32 +1160,27 @@ ${error?.stackTrace}''');
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    if (state == AppLifecycleState.paused) {
-      var height = MediaQuery.of(Get.context!).padding.top;
-      Log.d("当前状态栏高度$height");
-      Log.d("进入后台");
-      //进入后台，关闭弹幕和一次性礼物动画，避免后台继续计时与绘制。
+    if (state != AppLifecycleState.resumed) {
+      if (isBackground) return;
+      // 离开前台时暂停绘制与短周期任务，避免切应用或锁屏后继续耗电。
+      isBackground = true;
       danmakuController?.clear();
+      danmakuController?.pause();
       danmakuTimer?.cancel();
       danmakuTimer = null;
       _superChatTimer?.cancel();
       _superChatTimer = null;
       _clearHuyaGiftEffects();
-      isBackground = true;
-    } else
-    //返回前台
-    if (state == AppLifecycleState.resumed) {
-      // update();
-      var height = MediaQuery.of(Get.context!).padding.top;
-      Log.d("当前状态栏高度$height");
-      Log.d("返回前台");
-      danmakuController?.resume();
-      isBackground = false;
-      if (danmakuBuffer.isNotEmpty) {
-        _scheduleDanmakuBufferProcessing();
-      }
-      _ensureSuperChatTimer();
+      return;
     }
+
+    if (!isBackground) return;
+    isBackground = false;
+    danmakuController?.resume();
+    if (danmakuBuffer.isNotEmpty) {
+      _scheduleDanmakuBufferProcessing();
+    }
+    _ensureSuperChatTimer();
   }
 
   @override
@@ -1251,6 +1188,7 @@ ${error?.stackTrace}''');
     WidgetsBinding.instance.removeObserver(this);
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
+    _autoExitGraceTimer?.cancel();
     danmakuTimer?.cancel();
     _superChatTimer?.cancel();
     _huyaGiftSettingWorker?.dispose();
@@ -1263,5 +1201,101 @@ ${error?.stackTrace}''');
     danmakuController = null;
     rustDanmakuMask.dispose();
     super.onClose();
+  }
+}
+
+class _DanmuShieldSheet extends StatefulWidget {
+  const _DanmuShieldSheet();
+
+  @override
+  State<_DanmuShieldSheet> createState() => _DanmuShieldSheetState();
+}
+
+class _DanmuShieldSheetState extends State<_DanmuShieldSheet> {
+  final TextEditingController _keywordController = TextEditingController();
+  bool _isAdding = false;
+
+  @override
+  void dispose() {
+    _keywordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addKeyword() async {
+    final keyword = _keywordController.text.trim();
+    if (keyword.isEmpty) {
+      SmartDialog.showToast("请输入关键词");
+      return;
+    }
+    if (_isAdding) return;
+
+    setState(() => _isAdding = true);
+    try {
+      await AppSettingsController.instance.addShieldList(keyword);
+      if (mounted) _keywordController.clear();
+    } finally {
+      if (mounted) setState(() => _isAdding = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: AppStyle.edgeInsetsA12,
+      children: [
+        TextField(
+          controller: _keywordController,
+          decoration: InputDecoration(
+            contentPadding: AppStyle.edgeInsetsH12,
+            border: const OutlineInputBorder(),
+            hintText: "请输入关键词",
+            suffixIcon: TextButton.icon(
+              onPressed: _isAdding ? null : _addKeyword,
+              icon: const Icon(Icons.add),
+              label: const Text("添加"),
+            ),
+          ),
+          onSubmitted: (_) => _addKeyword(),
+        ),
+        AppStyle.vGap12,
+        Obx(
+          () => Text(
+            "已添加${AppSettingsController.instance.shieldList.length}个关键词（点击移除）",
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+        ),
+        AppStyle.vGap12,
+        Obx(
+          () => Wrap(
+            runSpacing: 12,
+            spacing: 12,
+            children: AppSettingsController.instance.shieldList
+                .map(
+                  (item) => InkWell(
+                    borderRadius: AppStyle.radius24,
+                    onTap: () =>
+                        AppSettingsController.instance.removeShieldList(item),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: AppStyle.radius24,
+                      ),
+                      padding: AppStyle.edgeInsetsH12.copyWith(
+                        top: 4,
+                        bottom: 4,
+                      ),
+                      child: Text(
+                        item,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        ),
+      ],
+    );
   }
 }

@@ -21,4 +21,10 @@ class DanmuShieldController extends BaseController {
   Future<void> remove(String item) async {
     await settingsController.removeShieldList(item);
   }
+
+  @override
+  void onClose() {
+    textEditingController.dispose();
+    super.onClose();
+  }
 }
