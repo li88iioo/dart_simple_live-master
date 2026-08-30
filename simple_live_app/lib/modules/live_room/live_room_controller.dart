@@ -19,6 +19,7 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/app/utils/sandbox.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/history.dart';
+import 'package:simple_live_app/modules/live_room/gift/huya_gift_danmaku_event.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controller.dart';
 import 'package:simple_live_app/modules/settings/danmu_settings_page.dart';
 import 'package:simple_live_app/services/db_service.dart';
@@ -74,6 +75,15 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// 聊天信息
   RxList<LiveMessage> messages = RxList<LiveMessage>();
 
+  /// 虎牙礼物特效只保留一个活动项和少量待显示项，防止礼物高峰堆积动画。
+  final Rxn<HuyaGiftDanmakuEvent> activeHuyaGiftEffect =
+      Rxn<HuyaGiftDanmakuEvent>();
+  final HuyaGiftDanmakuQueue _huyaGiftQueue = HuyaGiftDanmakuQueue();
+  Timer? _huyaGiftEffectTimer;
+  Worker? _huyaGiftSettingWorker;
+  Worker? _danmakuVisibilityWorker;
+  int _huyaGiftEffectSequence = 0;
+
   /// 清晰度数据
   RxList<LivePlayQuality> qualites = RxList<LivePlayQuality>();
 
@@ -125,6 +135,15 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
     initAutoExit();
     showDanmakuState.value = AppSettingsController.instance.danmuEnable.value;
+    _huyaGiftSettingWorker = ever<bool>(
+      AppSettingsController.instance.huyaGiftDanmakuEnable,
+      (enabled) {
+        if (!enabled) _clearHuyaGiftEffects();
+      },
+    );
+    _danmakuVisibilityWorker = ever<bool>(showDanmakuState, (visible) {
+      if (!visible) _clearHuyaGiftEffects();
+    });
     followed.value =
         FollowService.instance.getFollowExist("${site.id}_$roomId");
     loadData();
@@ -346,8 +365,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
     } else if (msg.type == LiveMessageType.gift) {
-      // 保留礼物原始类型及结构化 data，供后续礼物卡片、统计或特效复用。
-      _addEventMessage(msg);
+      _handleGiftMessage(msg);
     } else if (msg.type == LiveMessageType.vipCount) {
       final count = _parseVipCount(msg.data);
       if (count != null) {
@@ -382,6 +400,49 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => chatScrollToBottom(),
     );
+  }
+
+  void _handleGiftMessage(LiveMessage message) {
+    final isHuyaGift = site.id == Constant.kHuya;
+    // 聊天区始终保留礼物事实消息；开关只控制虎牙播放器弹幕区域的礼物特效。
+    _addEventMessage(message);
+    if (!shouldShowHuyaGiftDanmakuEffect(
+      isHuya: isHuyaGift,
+      giftDanmakuEnabled:
+          AppSettingsController.instance.huyaGiftDanmakuEnable.value,
+      isLive: liveStatus.value,
+      isBackground: isBackground,
+      showDanmaku: showDanmakuState.value,
+    )) {
+      return;
+    }
+
+    final event = HuyaGiftDanmakuEvent.fromMessage(
+      message,
+      sequence: ++_huyaGiftEffectSequence,
+    );
+    final shouldPresentImmediately = _huyaGiftQueue.enqueue(event);
+    if (shouldPresentImmediately) {
+      _presentActiveHuyaGift();
+    }
+  }
+
+  void _presentActiveHuyaGift() {
+    _huyaGiftEffectTimer?.cancel();
+    activeHuyaGiftEffect.value = _huyaGiftQueue.active;
+    if (_huyaGiftQueue.active == null) return;
+
+    _huyaGiftEffectTimer = Timer(const Duration(milliseconds: 2600), () {
+      _huyaGiftQueue.advance();
+      _presentActiveHuyaGift();
+    });
+  }
+
+  void _clearHuyaGiftEffects() {
+    _huyaGiftEffectTimer?.cancel();
+    _huyaGiftEffectTimer = null;
+    _huyaGiftQueue.clear();
+    activeHuyaGiftEffect.value = null;
   }
 
   /// 添加一条系统消息
@@ -1102,6 +1163,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       return;
     }
 
+    _clearHuyaGiftEffects();
     rxSite.value = site;
     rxRoomId.value = roomId;
     // 房间身份切换后立即清空旧房间快照，避免播放器停止期间短暂串房。
@@ -1143,8 +1205,9 @@ ${error?.stackTrace}''');
       var height = MediaQuery.of(Get.context!).padding.top;
       Log.d("当前状态栏高度$height");
       Log.d("进入后台");
-      //进入后台，关闭弹幕
+      //进入后台，关闭弹幕和一次性礼物动画，避免后台继续计时与绘制。
       danmakuController?.clear();
+      _clearHuyaGiftEffects();
       isBackground = true;
     } else
     //返回前台
@@ -1153,7 +1216,7 @@ ${error?.stackTrace}''');
       var height = MediaQuery.of(Get.context!).padding.top;
       Log.d("当前状态栏高度$height");
       Log.d("返回前台");
-      danmakuController?.resume;
+      danmakuController?.resume();
       isBackground = false;
     }
   }
@@ -1164,6 +1227,9 @@ ${error?.stackTrace}''');
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
     danmakuTimer?.cancel();
+    _huyaGiftSettingWorker?.dispose();
+    _danmakuVisibilityWorker?.dispose();
+    _clearHuyaGiftEffects();
     HistoryService.instance.stop();
 
     liveDanmaku.stop();

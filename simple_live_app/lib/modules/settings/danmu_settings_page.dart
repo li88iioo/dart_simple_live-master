@@ -70,6 +70,15 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 ),
               ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsSwitch(
+                  title: "虎牙礼物弹幕",
+                  subtitle: "在播放器弹幕区域显示真实礼物消息和轻量特效",
+                  value: controller.huyaGiftDanmakuEnable.value,
+                  onChanged: controller.setHuyaGiftDanmakuEnable,
+                ),
+              ),
             ],
           ),
         ),
@@ -184,7 +193,8 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: (e) {
                     controller.setDanmuSpeed(e.toDouble());
                     updateDanmuOption(
-                      danmakuController?.option.copyWith(duration: e.toDouble()),
+                      danmakuController?.option
+                          .copyWith(duration: e.toDouble()),
                     );
                   },
                 ),
@@ -199,7 +209,8 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: (e) {
                     controller.setDanmuStrokeWidth(e.toDouble());
                     updateDanmuOption(
-                      danmakuController?.option.copyWith(strokeWidth: e.toDouble()),
+                      danmakuController?.option
+                          .copyWith(strokeWidth: e.toDouble()),
                     );
                   },
                 ),
@@ -284,8 +295,8 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                       .instance.danmuFrequencyControl.value,
                   child: SettingsNumber(
                     title: "显示频率(次)",
-                    value: AppSettingsController
-                        .instance.danmuMaxFrequency.value,
+                    value:
+                        AppSettingsController.instance.danmuMaxFrequency.value,
                     step: 1,
                     max: 10,
                     min: 1,

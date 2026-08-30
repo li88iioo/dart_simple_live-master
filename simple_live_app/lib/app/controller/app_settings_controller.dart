@@ -38,6 +38,10 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kDanmuSpeed, 10.0);
     danmuEnable.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuEnable, true);
+    huyaGiftDanmakuEnable.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kHuyaGiftDanmakuEnable,
+      true,
+    );
     danmakuMaskEnable.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmakuMaskEnable, false);
     danmuStrokeWidth.value = LocalStorageService.instance
@@ -312,6 +316,16 @@ class AppSettingsController extends GetxController {
   void setDanmuEnable(bool e) {
     danmuEnable.value = e;
     LocalStorageService.instance.setValue(LocalStorageService.kDanmuEnable, e);
+  }
+
+  var huyaGiftDanmakuEnable = true.obs;
+
+  void setHuyaGiftDanmakuEnable(bool value) {
+    huyaGiftDanmakuEnable.value = value;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kHuyaGiftDanmakuEnable,
+      value,
+    );
   }
 
   var danmakuMaskEnable = false.obs;

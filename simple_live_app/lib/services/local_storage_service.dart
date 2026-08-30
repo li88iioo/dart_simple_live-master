@@ -62,6 +62,9 @@ class LocalStorageService extends GetxService {
   /// 弹幕开启
   static const String kDanmuEnable = "DanmuEnable";
 
+  /// 虎牙礼物弹幕与播放器礼物特效
+  static const String kHuyaGiftDanmakuEnable = "HuyaGiftDanmakuEnable";
+
   /// 弹幕去重
   static const String kDanmakuMaskEnable = "DanmakuMaskEnable";
 
