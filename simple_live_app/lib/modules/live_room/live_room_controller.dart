@@ -19,6 +19,8 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/app/utils/sandbox.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/history.dart';
+import 'package:simple_live_app/modules/live_room/chat/bounded_deferred_buffer.dart';
+import 'package:simple_live_app/modules/live_room/chat/danmaku_shield_matcher.dart';
 import 'package:simple_live_app/modules/live_room/gift/huya_gift_danmaku_event.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controller.dart';
 import 'package:simple_live_app/modules/settings/danmu_settings_page.dart';
@@ -41,6 +43,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   List<LiveMessage> danmakuBuffer = [];
   Timer? danmakuTimer;
+  Timer? _superChatTimer;
   bool _isProcessingBuffer = false;
 
   LiveRoomController({
@@ -74,6 +77,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   /// 聊天信息
   RxList<LiveMessage> messages = RxList<LiveMessage>();
+  final BoundedDeferredBuffer<LiveMessage> _chatMessageBuffer =
+      BoundedDeferredBuffer<LiveMessage>(maxVisible: 400, maxDeferred: 100);
+  final DanmakuShieldMatcher _shieldMatcher = DanmakuShieldMatcher();
+  int _shieldedMessageCount = 0;
 
   /// 虎牙礼物特效只保留一个活动项和少量待显示项，防止礼物高峰堆积动画。
   final Rxn<HuyaGiftDanmakuEvent> activeHuyaGiftEffect =
@@ -125,8 +132,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   var loadError = false.obs;
   Error? error;
 
-  int _count = 0;
-
   @override
   void onInit() {
     WidgetsBinding.instance.addObserver(this);
@@ -165,18 +170,14 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       maxFrequency: AppSettingsController.instance.danmuMaxFrequency.value,
       adaptiveWindow: false,
     );
-    danmakuTimer = Timer.periodic(
-      const Duration(milliseconds: 500),
-      (timer) {
-        _processDanmakuBuffer();
-        // sc同步计时调用 先刷后删
-        _count = (_count + 1) % 2;
-        if (_count == 0) {
-          superChats.refresh();
-          removeSuperChats();
-        }
-      },
-    );
+  }
+
+  void _scheduleDanmakuBufferProcessing() {
+    if (isBackground || danmakuTimer?.isActive == true) return;
+    danmakuTimer = Timer(const Duration(milliseconds: 500), () {
+      danmakuTimer = null;
+      _processDanmakuBuffer();
+    });
   }
 
   // 缓存降低跨线程消息开销 估算弹幕延迟在800ms左右
@@ -203,14 +204,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
       if (filteredBatch.isEmpty) return;
 
-      messages.addAll(filteredBatch);
-      if (messages.length > 200 && !disableAutoScroll.value) {
-        messages.removeRange(0, messages.length - 200);
-      }
-
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => chatScrollToBottom(),
-      );
+      _appendChatMessages(filteredBatch);
       if (!liveStatus.value || isBackground) {
         return;
       }
@@ -228,6 +222,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
           .toList());
     } finally {
       _isProcessingBuffer = false;
+      if (danmakuBuffer.isNotEmpty) {
+        _scheduleDanmakuBufferProcessing();
+      }
     }
   }
 
@@ -312,38 +309,27 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// 接收到WebSocket信息
   void onWSMessage(LiveMessage msg) async {
     if (msg.type == LiveMessageType.chat) {
-      // 关键词屏蔽检查
-      for (var keyword in AppSettingsController.instance.shieldList) {
-        Pattern? pattern;
-        if (Utils.isRegexFormat(keyword)) {
-          String removedSlash = Utils.removeRegexFormat(keyword);
-          try {
-            pattern = RegExp(removedSlash);
-          } catch (e) {
-            // should avoid this during add keyword
-            Log.d("关键词：$keyword 正则格式错误");
-          }
-        } else {
-          pattern = keyword;
+      final matchedRule = _shieldMatcher.match(
+        msg.message,
+        AppSettingsController.instance.shieldList,
+        onInvalidRegex: (rule) => Log.d("关键词：$rule 正则格式错误"),
+      );
+      if (matchedRule != null) {
+        _shieldedMessageCount++;
+        // 高频命中只做采样日志，避免热门房间反复写入完整弹幕内容。
+        if (_shieldedMessageCount == 1 || _shieldedMessageCount % 50 == 0) {
+          Log.d("弹幕屏蔽命中：$matchedRule，累计 $_shieldedMessageCount 条");
         }
-        if (pattern != null && msg.message.contains(pattern)) {
-          Log.d("关键词：$keyword\n已屏蔽消息内容：${msg.message}");
-          return;
-        }
+        return;
       }
 
       //  messages.length>n 预加载部分弹幕后启用去重功能
       if (AppSettingsController.instance.danmakuMaskEnable.value &&
           messages.length > 50) {
         danmakuBuffer.add(msg);
+        _scheduleDanmakuBufferProcessing();
       } else {
-        if (messages.length > 200 && !disableAutoScroll.value) {
-          messages.removeAt(0);
-        }
-        messages.add(msg);
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => chatScrollToBottom(),
-        );
+        _appendChatMessages([msg]);
         if (!liveStatus.value || isBackground) {
           return;
         }
@@ -364,6 +350,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       online.value = msg.data;
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
+      _ensureSuperChatTimer();
     } else if (msg.type == LiveMessageType.gift) {
       _handleGiftMessage(msg);
     } else if (msg.type == LiveMessageType.vipCount) {
@@ -393,13 +380,23 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   }
 
   void _addEventMessage(LiveMessage msg) {
-    if (messages.length > 200 && !disableAutoScroll.value) {
-      messages.removeAt(0);
-    }
-    messages.add(msg);
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => chatScrollToBottom(),
+    _appendChatMessages([msg]);
+  }
+
+  void _appendChatMessages(Iterable<LiveMessage> newMessages) {
+    final added = _chatMessageBuffer.append(
+      messages,
+      newMessages,
+      preserveVisible: disableAutoScroll.value,
     );
+    if (added == 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => chatScrollToBottom());
+  }
+
+  void resumeChatAutoScroll() {
+    disableAutoScroll.value = false;
+    _chatMessageBuffer.resume(messages);
+    WidgetsBinding.instance.addPostFrameCallback((_) => chatScrollToBottom());
   }
 
   void _handleGiftMessage(LiveMessage message) {
@@ -692,6 +689,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       var sc =
           await site.liveSite.getSuperChatMessage(roomId: detail.value!.roomId);
       superChats.addAll(sc);
+      _ensureSuperChatTimer();
     } catch (e) {
       Log.logPrint(e);
       addSysMsg("SC读取失败");
@@ -699,9 +697,25 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   }
 
   /// 移除掉已到期的SC
-  void removeSuperChats() async {
+  void removeSuperChats() {
     var now = DateTime.now().millisecondsSinceEpoch;
     superChats.removeWhere((x) => x.endTime.millisecondsSinceEpoch <= now);
+    if (superChats.isEmpty) {
+      _superChatTimer?.cancel();
+      _superChatTimer = null;
+    }
+  }
+
+  void _ensureSuperChatTimer() {
+    if (isBackground ||
+        superChats.isEmpty ||
+        _superChatTimer?.isActive == true) {
+      return;
+    }
+    _superChatTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      superChats.refresh();
+      removeSuperChats();
+    });
   }
 
   /// 添加历史记录
@@ -1172,7 +1186,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     // 清除全部消息
     liveDanmaku.stop();
     messages.clear();
+    _chatMessageBuffer.clear();
     superChats.clear();
+    _superChatTimer?.cancel();
+    _superChatTimer = null;
     danmakuController?.clear();
 
     // 重新设置LiveDanmaku
@@ -1207,6 +1224,10 @@ ${error?.stackTrace}''');
       Log.d("进入后台");
       //进入后台，关闭弹幕和一次性礼物动画，避免后台继续计时与绘制。
       danmakuController?.clear();
+      danmakuTimer?.cancel();
+      danmakuTimer = null;
+      _superChatTimer?.cancel();
+      _superChatTimer = null;
       _clearHuyaGiftEffects();
       isBackground = true;
     } else
@@ -1218,6 +1239,10 @@ ${error?.stackTrace}''');
       Log.d("返回前台");
       danmakuController?.resume();
       isBackground = false;
+      if (danmakuBuffer.isNotEmpty) {
+        _scheduleDanmakuBufferProcessing();
+      }
+      _ensureSuperChatTimer();
     }
   }
 
@@ -1227,9 +1252,11 @@ ${error?.stackTrace}''');
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
     danmakuTimer?.cancel();
+    _superChatTimer?.cancel();
     _huyaGiftSettingWorker?.dispose();
     _danmakuVisibilityWorker?.dispose();
     _clearHuyaGiftEffects();
+    _chatMessageBuffer.clear();
     HistoryService.instance.stop();
 
     liveDanmaku.stop();

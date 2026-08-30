@@ -62,40 +62,43 @@ class BasePageController<T> extends BaseController {
   var list = <T>[].obs;
 
   Future refreshData() async {
+    if (loadding) return;
     currentPage = 1;
-    list.value = [];
     await loadData();
   }
 
   Future loadData() async {
+    final requestedPage = currentPage;
+    final isFirstPage = requestedPage == 1;
     try {
       if (loadding) return;
       loadding = true;
       pageError.value = false;
       pageEmpty.value = false;
       notLogin.value = false;
-      pageLoadding.value = currentPage == 1;
+      // 已有数据刷新时保留旧列表，避免整页卡片销毁、闪白和重复图片解码。
+      pageLoadding.value = isFirstPage && list.isEmpty;
 
-      var result = await getData(currentPage, pageSize);
+      var result = await getData(requestedPage, pageSize);
       //是否可以加载更多
       if (result.isNotEmpty) {
-        currentPage++;
+        currentPage = requestedPage + 1;
         canLoadMore.value = true;
         pageEmpty.value = false;
       } else {
         canLoadMore.value = false;
-        if (currentPage == 1) {
+        if (isFirstPage) {
           pageEmpty.value = true;
         }
       }
       // 赋值数据
-      if (currentPage == 1) {
-        list.value = result;
+      if (isFirstPage) {
+        list.assignAll(result);
       } else {
         list.addAll(result);
       }
     } catch (e) {
-      handleError(e, showPageError: currentPage == 1);
+      handleError(e, showPageError: isFirstPage && list.isEmpty);
     } finally {
       loadding = false;
       pageLoadding.value = false;
@@ -116,5 +119,12 @@ class BasePageController<T> extends BaseController {
     } else {
       easyRefreshController.callRefresh();
     }
+  }
+
+  @override
+  void onClose() {
+    scrollController.dispose();
+    easyRefreshController.dispose();
+    super.onClose();
   }
 }

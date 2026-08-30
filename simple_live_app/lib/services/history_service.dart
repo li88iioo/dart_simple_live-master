@@ -10,76 +10,94 @@ import 'package:simple_live_app/models/db/history.dart';
 import 'db_service.dart';
 
 class HistoryService extends GetxService {
+  HistoryService({
+    Duration saveInterval = const Duration(minutes: 2),
+  }) : _saveInterval = saveInterval;
+
   static HistoryService get instance => Get.find<HistoryService>();
+
   final Stopwatch _stopwatch = Stopwatch();
-  var _elapsed = Duration.zero;
+  final Duration _saveInterval;
+  Duration _elapsed = Duration.zero;
   Duration _oldWatchedDuration = Duration.zero;
+  Duration _lastSavedElapsed = Duration.zero;
   History? curLiveRoomHistory;
+  Timer? _timer;
 
-  //两分钟自动保存一次，防止用户直接关闭app，丢失数据
-  final _saveInterval = const Duration(minutes: 2);
-  Timer? _timer; // 定时器
-
-  // 开始计时
+  /// 开始或恢复当前房间计时。重复刷新同一房间时复用唯一会话和 Timer。
   void start(History history) {
-    _loadHistory(history);
-    _stopwatch.start();
-    _timer = Timer.periodic(_saveInterval, (timer) {
-      _updateHistory();
-    });
-  }
+    _timer?.cancel();
 
-  // reset
-  void reset(String roomId) {
-    _updateHistory();
-    _stopwatch.reset();
-    History? history = DBService.instance.getHistory(roomId);
-    if (history != null) {
+    if (curLiveRoomHistory?.id != history.id) {
+      if (curLiveRoomHistory != null) {
+        _stopwatch.stop();
+        _updateHistory();
+      }
+      _stopwatch.reset();
+      _lastSavedElapsed = Duration.zero;
       _loadHistory(history);
     }
+
+    _stopwatch.start();
+    _timer = Timer.periodic(_saveInterval, (_) => _updateHistory());
   }
 
-  // 停止计时
-  void stop() {
+  /// 切换房间时先提交旧房间数据，再等待新房间详情调用 [start]。
+  void reset(String roomId) {
+    _timer?.cancel();
+    _timer = null;
     _stopwatch.stop();
     _updateHistory();
     _stopwatch.reset();
     _elapsed = Duration.zero;
-    // 取消定时器
+    _lastSavedElapsed = Duration.zero;
+    curLiveRoomHistory = null;
+  }
+
+  /// 停止计时并提交本次会话最后一段观看时长。
+  void stop() {
     _timer?.cancel();
     _timer = null;
+    _stopwatch.stop();
+    _updateHistory();
+    final sessionElapsed = _stopwatch.elapsed;
+    _stopwatch.reset();
+    _elapsed = Duration.zero;
+    _lastSavedElapsed = Duration.zero;
     curLiveRoomHistory = null;
-    Log.i("本次观看时长：$_elapsed");
+    Log.i("本次观看时长：$sessionElapsed");
   }
 
   void _loadHistory(History history) {
     curLiveRoomHistory = DBService.instance.getHistory(history.id);
-    // 首次观看则创建
     if (curLiveRoomHistory == null) {
       curLiveRoomHistory = history;
-      DBService.instance.addOrUpdateHistory(history);
+      unawaited(DBService.instance.addOrUpdateHistory(history));
     }
     _oldWatchedDuration = curLiveRoomHistory!.duration;
   }
 
-  // updateHistory
   void _updateHistory() {
-    if (curLiveRoomHistory == null) {
-      return;
-    }
-    // 累加到当前历史记录
+    final history = curLiveRoomHistory;
+    if (history == null) return;
+
     _elapsed = _stopwatch.elapsed;
-    Duration curTime = _oldWatchedDuration + _elapsed;
+    final delta = _elapsed - _lastSavedElapsed;
+    if (delta <= Duration.zero) return;
+
+    final currentDuration = _oldWatchedDuration + _elapsed;
     Log.i(
-        "已观看时间：${_oldWatchedDuration.toHMSString()}_增加时间：${_elapsed.toHMSString()}");
-    curLiveRoomHistory?.watchDuration = curTime.toHMSString();
-    curLiveRoomHistory?.syncDuration += _elapsed.inSeconds;
-    curLiveRoomHistory?.updateTime = DateTime.now();
-    DBService.instance.addOrUpdateHistory(curLiveRoomHistory!);
-    EventBus.instance.emit(Constant.kUpdateFollow, curLiveRoomHistory);
+      "已观看时间：${_oldWatchedDuration.toHMSString()}_增加时间：${_elapsed.toHMSString()}",
+    );
+    history.watchDuration = currentDuration.toHMSString();
+    // 只累加上次保存后的增量，避免周期保存把整段会话重复计入同步时长。
+    history.syncDuration += delta.inSeconds;
+    history.updateTime = DateTime.now();
+    _lastSavedElapsed = _elapsed;
+    unawaited(DBService.instance.addOrUpdateHistory(history));
+    EventBus.instance.emit(Constant.kUpdateFollow, history);
   }
 
-  // 获取历史记录中存储的累计观看时长
   String getHistoryDuration({required String followUserId}) {
     var historyWatchDuration = "00:00:00";
     History? history = DBService.instance.getHistory(followUserId);
@@ -87,7 +105,6 @@ class HistoryService extends GetxService {
     return historyWatchDuration;
   }
 
-  // history crud
   History? getHistory(String id) {
     return DBService.instance.getHistory(id);
   }

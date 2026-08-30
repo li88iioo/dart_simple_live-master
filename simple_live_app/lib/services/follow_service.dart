@@ -16,6 +16,7 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
+import 'package:simple_live_app/app/utils/async_single_flight.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/app/utils/duration_2_str_utils.dart';
 import 'package:simple_live_app/app/utils/dynamic_sort.dart';
@@ -28,7 +29,7 @@ import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:synchronized/synchronized.dart';
 
-class FollowService extends GetxService {
+class FollowService extends GetxService with WidgetsBindingObserver {
   StreamSubscription<dynamic>? subscription;
 
   static FollowService get instance => Get.find<FollowService>();
@@ -62,6 +63,9 @@ class FollowService extends GetxService {
   var updating = false.obs;
 
   Timer? updateTimer;
+  final AsyncSingleFlight<void> _statusUpdateFlight = AsyncSingleFlight<void>();
+  bool _isForeground = true;
+  DateTime? _lastStatusUpdate;
 
   int _totalToUpdate = 0;
 
@@ -71,6 +75,7 @@ class FollowService extends GetxService {
 
   @override
   Future<void> onInit() async {
+    WidgetsBinding.instance.addObserver(this);
     subscription = EventBus.instance.listen(Constant.kUpdateFollow, (data) {
       if (data is History) {
         updateFollowHistory(data);
@@ -289,16 +294,18 @@ class FollowService extends GetxService {
   }
 
   void initTimer() {
-    if (AppSettingsController.instance.autoUpdateFollowEnable.value) {
+    if (_isForeground &&
+        AppSettingsController.instance.autoUpdateFollowEnable.value) {
       updateTimer?.cancel();
       _refreshCycle = 0;
       updateTimer = Timer.periodic(
         Duration(
             minutes:
                 AppSettingsController.instance.autoUpdateFollowDuration.value),
-        (timer) {
+        (timer) async {
+          if (_statusUpdateFlight.isRunning) return;
           CoreLog.i("Update Follow Timer - Cycle: $_refreshCycle");
-          loadData(updateStatus: true, cycle: _refreshCycle);
+          await loadData(updateStatus: true, cycle: _refreshCycle);
           _refreshCycle = (_refreshCycle + 1) % 2; // 2-cycle rotation
         },
       );
@@ -353,7 +360,7 @@ class FollowService extends GetxService {
       return;
     }
     if (updateStatus) {
-      startUpdateStatus(cycle: cycle);
+      await startUpdateStatus(cycle: cycle);
     } else {
       _updatedListController.add(0);
     }
@@ -408,7 +415,11 @@ class FollowService extends GetxService {
     });
   }
 
-  void startUpdateStatus({int? cycle}) async {
+  Future<void> startUpdateStatus({int? cycle}) {
+    return _statusUpdateFlight.run(() => _runUpdateStatus(cycle: cycle));
+  }
+
+  Future<void> _runUpdateStatus({int? cycle}) async {
     List<FollowUser> usersToUpdate;
     final totalUsers = followList.length;
     final douyinCount = followList.where((x) => x.siteId == 'douyin').length;
@@ -443,35 +454,43 @@ class FollowService extends GetxService {
     updating.value = true;
 
     if (_totalToUpdate == 0) {
-      updating.value = false;
       filterData();
+      updating.value = false;
+      _lastStatusUpdate = DateTime.now();
       return;
     }
 
     var threadCount =
         AppSettingsController.instance.updateFollowThreadCount.value;
 
-    var pool = Pool(threadCount);
-    var tasks = <Future>[];
+    final pool = Pool(threadCount);
+    try {
+      final tasks = <Future<void>>[];
+      for (var user in usersToUpdate) {
+        tasks.add(pool.withResource(() => updateLiveInformation(user)));
+      }
+      await Future.wait(tasks);
 
-    for (var user in usersToUpdate) {
-      tasks.add(pool.withResource(() => updateLiveInformation(user)));
+      filterData();
+      _lastStatusUpdate = DateTime.now();
+
+      // frequency of snapshot-saving and expireAt calculation depend on user-setting: auto-update
+      final minutes =
+          AppSettingsController.instance.autoUpdateFollowDuration.value;
+      final expireAt =
+          DateTime.now().add(Duration(minutes: minutes)).microsecondsSinceEpoch;
+      AppSettingsController.instance.setFollowSnapshot(
+        FollowSnapshot(
+          expireAt: expireAt,
+          followSnapshotItems: followList.map((e) => e.toSnapshot()).toList(),
+        ),
+      );
+      Log.i(
+          "FollowService: follow-snapshot has saved, time: ${DateTime.now()}");
+    } finally {
+      await pool.close();
+      updating.value = false;
     }
-    await Future.wait(tasks);
-    await pool.close();
-
-    // frequency of snapshot-saving and expireAt calculation depend on user-setting: auto-update
-    final minutes =
-        AppSettingsController.instance.autoUpdateFollowDuration.value;
-    final expireAt =
-        DateTime.now().add(Duration(minutes: minutes)).microsecondsSinceEpoch;
-    AppSettingsController.instance.setFollowSnapshot(
-      FollowSnapshot(
-        expireAt: expireAt,
-        followSnapshotItems: followList.map((e) => e.toSnapshot()).toList(),
-      ),
-    );
-    Log.i("FollowService: follow-snapshot has saved, time: ${DateTime.now()}");
   }
 
   Future updateLiveInformation(FollowUser item) async {
@@ -489,10 +508,30 @@ class FollowService extends GetxService {
       await _lock.synchronized(() {
         updatedCount++;
       });
-      if (updatedCount >= _totalToUpdate) {
-        filterData();
-        updating.value = false;
-      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_isForeground == foreground) return;
+
+    _isForeground = foreground;
+    if (!foreground) {
+      updateTimer?.cancel();
+      updateTimer = null;
+      return;
+    }
+
+    initTimer();
+    if (!AppSettingsController.instance.autoUpdateFollowEnable.value) return;
+    final interval = Duration(
+      minutes: AppSettingsController.instance.autoUpdateFollowDuration.value,
+    );
+    final stale = _lastStatusUpdate == null ||
+        DateTime.now().difference(_lastStatusUpdate!) >= interval;
+    if (stale) {
+      unawaited(loadData(updateStatus: true, cycle: _refreshCycle));
     }
   }
 
@@ -779,8 +818,10 @@ class FollowService extends GetxService {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     updateTimer?.cancel();
     subscription?.cancel();
+    _updatedListController.close();
     super.onClose();
   }
 }
