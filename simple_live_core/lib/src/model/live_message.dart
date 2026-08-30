@@ -15,6 +15,9 @@ enum LiveMessageType {
 
   /// 贵宾进场
   vipEnter,
+
+  /// 贵宾人数快照
+  vipCount,
 }
 
 class LiveMessage {

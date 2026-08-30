@@ -35,8 +35,15 @@ class WebScoketUtils {
   /// 心跳
   final Function()? onHeartBeat;
 
+  /// 单次连接超时
+  final Duration connectTimeout;
+
+  /// 两次重连之间的等待时间
+  final Duration reconnectInterval;
+
   /// 请求头
   Map<String, dynamic>? headers;
+
   WebScoketUtils({
     required this.url,
     required this.heartBeatTime,
@@ -47,58 +54,140 @@ class WebScoketUtils {
     this.onHeartBeat,
     this.headers,
     this.backupUrl,
+    this.connectTimeout = const Duration(seconds: 10),
+    this.reconnectInterval = const Duration(seconds: 5),
+    this.maxReconnectTime = 5,
   });
+
   IOWebSocketChannel? webSocket;
   Timer? heartBeatTimer;
 
-  /// 重连次数
+  /// 已执行的连续重连次数；收到任意服务端消息后清零。
   int reconnectTime = 0;
   Timer? reconnectTimer;
 
-  /// 最大重连次数
-  int maxReconnectTime = 5;
+  /// 最大连续重连次数
+  int maxReconnectTime;
 
   StreamSubscription<dynamic>? streamSubscription;
 
-  void connect({bool retry = false}) async {
-    close();
-    try {
-      var wsurl = url;
-      if (backupUrl != null && backupUrl!.isNotEmpty && retry) {
-        wsurl = backupUrl!;
-      }
-      webSocket = IOWebSocketChannel.connect(
-        wsurl,
-        connectTimeout: Duration(seconds: 10),
-        headers: headers,
-      );
+  bool _closedByUser = true;
+  bool _reconnectNotified = false;
+  int _connectionGeneration = 0;
+  int? _handledDisconnectGeneration;
 
-      await webSocket?.ready;
-      ready();
-    } catch (e) {
-      if (!retry) {
-        connect(retry: true);
+  /// 建立连接。每一轮会依次尝试主地址与不同的备用地址。
+  Future<void> connect({bool retry = false}) async {
+    _closedByUser = false;
+    reconnectTimer?.cancel();
+    reconnectTimer = null;
+    if (!retry) {
+      reconnectTime = 0;
+      _reconnectNotified = false;
+    }
+    await _connectAttempt(preferBackup: retry);
+  }
+
+  Future<void> _connectAttempt({bool preferBackup = false}) async {
+    if (_closedByUser) return;
+
+    final generation = ++_connectionGeneration;
+    _handledDisconnectGeneration = null;
+    _closeActiveConnection();
+    status = SocketStatus.closed;
+
+    Object? lastError;
+    for (final wsUrl in _connectionCandidates(preferBackup: preferBackup)) {
+      if (_closedByUser || generation != _connectionGeneration) return;
+
+      IOWebSocketChannel? channel;
+      try {
+        channel = IOWebSocketChannel.connect(
+          wsUrl,
+          connectTimeout: connectTimeout,
+          headers: headers,
+        );
+        webSocket = channel;
+        await channel.ready;
+      } catch (error) {
+        lastError = error;
+        if (identical(webSocket, channel)) {
+          webSocket = null;
+        }
+        channel?.sink.close();
+        continue;
+      }
+
+      if (_closedByUser || generation != _connectionGeneration) {
+        channel.sink.close();
         return;
       }
-      onError(e, StackTrace.current);
+
+      _activateConnection(channel, generation);
+      return;
+    }
+
+    if (_closedByUser || generation != _connectionGeneration) return;
+    status = SocketStatus.failed;
+    if (lastError != null && !_reconnectNotified) {
+      onClose?.call(lastError.toString());
+    }
+    if (_closedByUser || generation != _connectionGeneration) return;
+    _scheduleReconnect();
+  }
+
+  List<String> _connectionCandidates({required bool preferBackup}) {
+    final result = <String>[];
+
+    void addIfNew(String? value) {
+      if (value != null && value.isNotEmpty && !result.contains(value)) {
+        result.add(value);
+      }
+    }
+
+    if (preferBackup) {
+      addIfNew(backupUrl);
+      addIfNew(url);
+    } else {
+      addIfNew(url);
+      addIfNew(backupUrl);
+    }
+    return result;
+  }
+
+  void _activateConnection(IOWebSocketChannel channel, int generation) {
+    webSocket = channel;
+    status = SocketStatus.connected;
+    _handledDisconnectGeneration = null;
+
+    streamSubscription = channel.stream.listen(
+      (data) {
+        if (generation != _connectionGeneration || _closedByUser) return;
+        receiveMessage(data);
+      },
+      onError: (Object error, StackTrace _) {
+        _handleDisconnect(generation, error: error);
+      },
+      onDone: () => _handleDisconnect(generation),
+    );
+
+    initHeartBeat();
+    try {
+      onReady?.call();
+    } catch (error) {
+      _handleDisconnect(generation, error: error);
     }
   }
 
-  /// 连接完成
+  /// 连接完成。保留该方法以兼容既有调用。
   void ready() {
-    status = SocketStatus.connected;
-
-    streamSubscription = webSocket?.stream.listen(
-      (data) => receiveMessage(data),
-      onError: (e, s) => onError(e, s),
-      onDone: onDone,
-    );
-
-    onReady?.call();
-    initHeartBeat();
+    final channel = webSocket;
+    if (channel == null || _closedByUser) return;
+    _activateConnection(channel, _connectionGeneration);
   }
 
   void initHeartBeat() {
+    heartBeatTimer?.cancel();
     heartBeatTimer = Timer.periodic(
       Duration(milliseconds: heartBeatTime),
       (timer) {
@@ -108,57 +197,105 @@ class WebScoketUtils {
   }
 
   void receiveMessage(dynamic data) {
-    //接受到一条信息才算重连成功
+    // 接收到一条服务端信息才算本轮重连成功。
     reconnectTime = 0;
+    _reconnectNotified = false;
     onMessage?.call(data);
   }
 
-  void onError(Object e, StackTrace s) {
-    status = SocketStatus.failed;
-    onClose?.call(e.toString());
+  void onError(Object error, StackTrace _) {
+    _handleDisconnect(_connectionGeneration, error: error);
   }
 
   void onDone() {
-    if (status == SocketStatus.closed) {
-      return;
+    _handleDisconnect(_connectionGeneration);
+  }
+
+  void _handleDisconnect(
+    int generation, {
+    Object? error,
+  }) {
+    if (_closedByUser || generation != _connectionGeneration) return;
+    if (_handledDisconnectGeneration == generation) return;
+    _handledDisconnectGeneration = generation;
+
+    if (error != null) {
+      status = SocketStatus.failed;
+      if (!_reconnectNotified) {
+        onClose?.call(error.toString());
+      }
+      if (_closedByUser || generation != _connectionGeneration) return;
     }
-    onReconnect?.call();
-    reconnect();
+    _scheduleReconnect();
   }
 
   void sendMessage(dynamic message) {
-    if (status == SocketStatus.connected) {
+    if (status != SocketStatus.connected) return;
+    try {
       webSocket?.sink.add(message);
+    } catch (error) {
+      _handleDisconnect(_connectionGeneration, error: error);
     }
   }
 
+  /// 主动关闭；后续不会自动重连。
   void close() {
+    _closedByUser = true;
     status = SocketStatus.closed;
-
-    streamSubscription?.cancel();
+    reconnectTime = 0;
+    _reconnectNotified = false;
+    _handledDisconnectGeneration = null;
+    _connectionGeneration++;
 
     reconnectTimer?.cancel();
     reconnectTimer = null;
-
-    webSocket?.sink.close();
-
-    heartBeatTimer?.cancel();
-    heartBeatTimer = null;
+    _closeActiveConnection();
   }
 
+  /// 主动放弃当前连接并进入有限次数的重连流程。
   void reconnect() {
+    if (_closedByUser) return;
+    _scheduleReconnect();
+  }
+
+  void _scheduleReconnect() {
+    if (_closedByUser || reconnectTimer != null) return;
+
+    _connectionGeneration++;
+    _handledDisconnectGeneration = null;
+    _closeActiveConnection();
     status = SocketStatus.closed;
-    if (reconnectTime < maxReconnectTime) {
-      reconnectTime++;
-      reconnectTimer ??= Timer.periodic(Duration(seconds: 5), (timer) {
-        connect();
-      });
-    } else {
-      onClose?.call("重连超过最大次数，与服务器断开连接");
-      reconnectTimer?.cancel();
-      reconnectTimer = null;
+
+    if (reconnectTime >= maxReconnectTime) {
       close();
+      onClose?.call("重连超过最大次数，与服务器断开连接");
       return;
     }
+
+    reconnectTime++;
+    if (!_reconnectNotified) {
+      _reconnectNotified = true;
+      onReconnect?.call();
+      if (_closedByUser) return;
+    }
+
+    reconnectTimer = Timer(reconnectInterval, () {
+      reconnectTimer = null;
+      if (_closedByUser) return;
+      _connectAttempt();
+    });
+  }
+
+  void _closeActiveConnection() {
+    heartBeatTimer?.cancel();
+    heartBeatTimer = null;
+
+    final subscription = streamSubscription;
+    streamSubscription = null;
+    subscription?.cancel();
+
+    final channel = webSocket;
+    webSocket = null;
+    channel?.sink.close();
   }
 }

@@ -9,21 +9,24 @@ import 'package:tars_dart/tars/codec/tars_struct.dart';
 class HuyaHySignalCommandType {
   const HuyaHySignalCommandType._();
 
+  static const int wupRequest = 3;
+  static const int wupResponse = 4;
   static const int pushMessage = 7;
+  static const int registerGroupRequest = 16;
+  static const int registerGroupResponse = 17;
+  static const int heartbeatRequest = 20;
   static const int pushMessageV2 = 22;
 }
 
 class HuyaPushUri {
   const HuyaPushUri._();
 
+  static const int chat = 1400;
+  static const int vipEnterBanner = 6110;
   static const int vipBarList = 6210;
   static const int vipBarCount = 6211;
   static const int vipBarSimpleList = 6213;
   static const int giftSubChannel = 6501;
-  static const int giftTopChannel = 6502;
-  static const int giftGameBroadcast = 6507;
-  static const int giftOtherBroadcast = 6514;
-  static const int bigGiftEffect = 6541;
   static const int attendeeCount = 8006;
 }
 
@@ -38,7 +41,10 @@ class HYWSPushMessageV2 extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(groupId, 0);
+    _os.write(items, 1);
+  }
 
   @override
   Object deepCopy() {
@@ -64,7 +70,11 @@ class HYWSMsgItem extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(uri, 0);
+    _os.write(message, 1);
+    _os.write(messageId, 2);
+  }
 
   @override
   Object deepCopy() {
@@ -78,6 +88,37 @@ class HYWSMsgItem extends TarsStruct {
   void displayAsString(StringBuffer sb, int level) {}
 }
 
+class HYWSRegisterGroupRsp extends TarsStruct {
+  int resultCode = 0;
+  List<String> supportedGroupIds = <String>[];
+
+  @override
+  void readFrom(TarsInputStream _is) {
+    resultCode = _is.read(resultCode, 0, false);
+    supportedGroupIds = _is.readList<String>([""], 1, false);
+  }
+
+  @override
+  void writeTo(TarsOutputStream _os) {
+    _os.write(resultCode, 0);
+    _os.write(supportedGroupIds, 1);
+  }
+
+  @override
+  Object deepCopy() {
+    return HYWSRegisterGroupRsp()
+      ..resultCode = resultCode
+      ..supportedGroupIds = List<String>.from(supportedGroupIds);
+  }
+
+  @override
+  void displayAsString(StringBuffer sb, int level) {}
+}
+
+/// URI 6501: SendItemSubBroadcastPacket。
+///
+/// 当前桌面网页协议包含 tag 0-42；其中 [propsName] 是广播包自带的真实礼物名。
+/// 礼物目录只在旧版/移动端形状未携带名称时作为回退，不能覆盖广播事实。
 class HYSendItemSubBroadcastPacket extends TarsStruct {
   int itemType = 0;
   String payId = "";
@@ -173,7 +214,46 @@ class HYSendItemSubBroadcastPacket extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(itemType, 0);
+    _os.write(payId, 1);
+    _os.write(itemCount, 2);
+    _os.write(presenterUid, 3);
+    _os.write(senderUid, 4);
+    _os.write(presenterNick, 5);
+    _os.write(senderNick, 6);
+    _os.write(sendContent, 7);
+    _os.write(itemCountByGroup, 8);
+    _os.write(itemGroup, 9);
+    _os.write(superPurpleLevel, 10);
+    _os.write(comboScore, 11);
+    _os.write(displayInfo, 12);
+    _os.write(effectType, 13);
+    _os.write(senderIcon, 14);
+    _os.write(presenterIcon, 15);
+    _os.write(templateType, 16);
+    _os.write(expand, 17);
+    _os.write(business, 18);
+    _os.write(colorEffectType, 19);
+    _os.write(propsName, 20);
+    _os.write(accept, 21);
+    _os.write(eventType, 22);
+    _os.write(roomId, 24);
+    _os.write(homeOwnerUid, 25);
+    _os.write(payType, 27);
+    _os.write(nobleLevel, 28);
+    _os.write(effectInfo, 30);
+    _os.write(comboStatus, 32);
+    _os.write(pidColorType, 33);
+    _os.write(multiSend, 34);
+    _os.write(vFanLevel, 35);
+    _os.write(upgradeLevel, 36);
+    _os.write(customText, 37);
+    _os.write(diyEffect, 38);
+    _os.write(comboSeqId, 39);
+    _os.write(payTotal, 41);
+    _os.write(bizData, 42);
+  }
 
   @override
   Object deepCopy() {
@@ -215,9 +295,8 @@ class HYSendItemSubBroadcastPacket extends TarsStruct {
       ..diyEffect = diyEffect.deepCopy() as HYDIYBigGiftEffect
       ..comboSeqId = comboSeqId
       ..payTotal = payTotal
-      ..bizData = bizData
-          .map((e) => e.deepCopy() as HYItemEffectBizData)
-          .toList();
+      ..bizData =
+          bizData.map((e) => e.deepCopy() as HYItemEffectBizData).toList();
   }
 
   @override
@@ -242,7 +321,12 @@ class HYItemEffectInfo extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(priceLevel, 0);
+    _os.write(streamDuration, 1);
+    _os.write(showType, 2);
+    _os.write(streamId, 3);
+  }
 
   @override
   Object deepCopy() {
@@ -272,7 +356,12 @@ class HYDIYBigGiftEffect extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(resourceUrl, 0);
+    _os.write(resourceAttr, 1);
+    _os.write(webResourceUrl, 2);
+    _os.write(pcResourceUrl, 3);
+  }
 
   @override
   Object deepCopy() {
@@ -298,7 +387,10 @@ class HYItemEffectBizData extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(type, 0);
+    _os.write(data, 1);
+  }
 
   @override
   Object deepCopy() {
@@ -353,6 +445,42 @@ class HYLiveRoomLargeConsumptionEffectNotice extends TarsStruct {
       ..recipientAvatar = recipientAvatar
       ..itemName = itemName
       ..effectParams = Map<String, String>.from(effectParams);
+  }
+
+  @override
+  void displayAsString(StringBuffer sb, int level) {}
+}
+
+/// URI 6110: 当前网页使用的贵宾进场横幅。
+class HYVipEnterBanner extends TarsStruct {
+  int uid = 0;
+  String nickName = "";
+  int pid = 0;
+  String logoUrl = "";
+
+  @override
+  void readFrom(TarsInputStream _is) {
+    uid = _is.read(uid, 0, false);
+    nickName = _is.read(nickName, 1, false);
+    pid = _is.read(pid, 2, false);
+    logoUrl = _is.read(logoUrl, 6, false);
+  }
+
+  @override
+  void writeTo(TarsOutputStream _os) {
+    _os.write(uid, 0);
+    _os.write(nickName, 1);
+    _os.write(pid, 2);
+    _os.write(logoUrl, 6);
+  }
+
+  @override
+  Object deepCopy() {
+    return HYVipEnterBanner()
+      ..uid = uid
+      ..nickName = nickName
+      ..pid = pid
+      ..logoUrl = logoUrl;
   }
 
   @override
@@ -462,7 +590,10 @@ class HYVipBarListStatInfo extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(pid, 0);
+    _os.write(total, 1);
+  }
 
   @override
   Object deepCopy() => HYVipBarListStatInfo()
@@ -494,9 +625,7 @@ class HYGetVipBarSimpleListRsp extends TarsStruct {
   Object deepCopy() {
     return HYGetVipBarSimpleListRsp()
       ..totalNum = totalNum
-      ..items = items
-          .map((e) => e.deepCopy() as HYVipBarSimpleItem)
-          .toList();
+      ..items = items.map((e) => e.deepCopy() as HYVipBarSimpleItem).toList();
   }
 
   @override
@@ -539,7 +668,9 @@ class HYAttendeeCountNotice extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(attendeeCount, 0);
+  }
 
   @override
   Object deepCopy() => HYAttendeeCountNotice()..attendeeCount = attendeeCount;

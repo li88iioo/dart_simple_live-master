@@ -10,7 +10,6 @@ import 'package:simple_live_core/src/model/tars/types.dart';
 import 'package:simple_live_core/src/platforms/huya/huya_utils.dart';
 import 'package:tars_dart/tars/net/base_tars_http.dart';
 
-
 class HuyaSite implements LiveSite {
   static const String baseUrl = "https://www.huya.com";
   static const String wupUrl = "http://wup.huya.com";
@@ -41,7 +40,6 @@ class HuyaSite implements LiveSite {
 
   final BaseTarsHttp tupClient =
       BaseTarsHttp("http://wup.huya.com", "liveui", headers: requestHeaders);
-
 
   @override
   String id = "huya";
@@ -251,8 +249,7 @@ class HuyaSite implements LiveSite {
               "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
         },
       );
-      var fansMatch =
-          RegExp(r'"lActivityCount":(\d+)').firstMatch(mobileText);
+      var fansMatch = RegExp(r'"lActivityCount":(\d+)').firstMatch(mobileText);
       if (fansMatch != null) {
         fansCount = int.tryParse(fansMatch.group(1) ?? "");
       }
@@ -288,7 +285,7 @@ class HuyaSite implements LiveSite {
               roomDataJson["isReplay"] == false,
           url: "https://www.huya.com/$roomId",
           introduction: streamDataGameLiveInfo["introduction"],
-          notice: streamDataGameLiveInfo["introduction"],
+          notice: "",
           isRecord: roomDataJson["isReplay"],
           fansCount: fansCount,
         );
@@ -303,7 +300,10 @@ class HuyaSite implements LiveSite {
           var subSid = int.tryParse(
               streamDataGameStreamInfo["lSubChannelId"].toString());
           var presenterUid =
-              int.tryParse(streamDataGameLiveInfo["uid"].toString());
+              int.tryParse(streamDataGameLiveInfo["uid"].toString()) ??
+                  int.tryParse(
+                    streamDataGameStreamInfo["lPresenterUid"].toString(),
+                  );
           result = result.updateDanmakuData(
             HuyaDanmakuArgs(
               ayyuid: presenterUid ?? 0,
@@ -325,6 +325,10 @@ class HuyaSite implements LiveSite {
             lineTypes.forEach((key, type) {
               final url = item[key]?.toString() ?? "";
               if (url.isNotEmpty) {
+                final linePresenterUid =
+                    int.tryParse(item["lPresenterUid"].toString()) ??
+                        presenterUid ??
+                        0;
                 huyaLines.add(
                   HuyaLineModel(
                     line: url,
@@ -333,7 +337,7 @@ class HuyaSite implements LiveSite {
                     hlsAntiCode: item["sHlsAntiCode"].toString(),
                     streamName: item["sStreamName"].toString(),
                     cdnType: item["sCdnType"].toString(),
-                    presenterUid: topSid ?? 0,
+                    presenterUid: linePresenterUid,
                   ),
                 );
               }
@@ -368,7 +372,6 @@ class HuyaSite implements LiveSite {
 
     return result;
   }
-
 
   // 构造 anticode, python转写
   /// [stream] streamname [presenterUid] 用户id [antiCode] 页面anti
@@ -540,7 +543,7 @@ class HuyaSite implements LiveSite {
     }
     return false;
   }
-  
+
   /// 匿名登录获取uid
   Future<String> getAnonymousUid() async {
     var result = await HttpClient.instance.postJson(

@@ -7,6 +7,7 @@ import 'package:lottie/lottie.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
@@ -350,8 +351,12 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               ),
             ),
             AppStyle.hGap12,
-            Obx(
-              () => Column(
+            Obx(() {
+              final vipCount = controller.vipCount.value;
+              final showVipCount = controller.site.id == Constant.kHuya ||
+                  (vipCount != null && vipCount > 0);
+
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -366,7 +371,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       AppStyle.hGap4,
                       Text(
                         Utils.onlineToString(
-                          controller.site.id == "huya"
+                          controller.site.id == Constant.kHuya
                               ? controller.online.value
                               : (controller.detail.value?.online ?? 0),
                         ),
@@ -374,28 +379,41 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       ),
                     ],
                   ),
-                  if (controller.site.id == "huya" ||
-                      controller.vipCount.value > 0) ...[
+                  if (showVipCount) ...[
                     AppStyle.vGap4,
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Remix.vip_crown_fill,
-                          size: 16,
-                          color: Colors.amber,
-                        ),
-                        AppStyle.hGap4,
-                        Text(
-                          "${controller.vipCount.value}",
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
+                    SizedBox(
+                      height: 16,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Remix.vip_crown_fill,
+                            size: 16,
+                            color: Colors.amber,
+                          ),
+                          AppStyle.hGap4,
+                          SizedBox(
+                            width: 44,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                vipCount?.toString() ?? "--",
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: vipCount == null ? Colors.grey : null,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ],
-              ),
-            ),
+              );
+            }),
           ],
         ),
       ),
@@ -546,12 +564,22 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   }
 
   Widget buildMessageItem(LiveMessage message) {
-    if (message.userName == "LiveSysMessage") {
+    final isGift = message.type == LiveMessageType.gift;
+    final isVipEnter = message.type == LiveMessageType.vipEnter;
+    if (message.userName == "LiveSysMessage" || isGift || isVipEnter) {
       return Obx(
         () => SelectableText(
           message.message,
           style: TextStyle(
-            color: Colors.grey,
+            color: isGift
+                ? (Get.isDarkMode
+                    ? Colors.amber.shade300
+                    : Colors.deepOrange.shade800)
+                : isVipEnter
+                    ? (Get.isDarkMode
+                        ? Colors.deepPurple.shade300
+                        : Colors.deepPurple.shade700)
+                    : Colors.grey,
             fontSize: AppSettingsController.instance.chatTextSize.value,
           ),
         ),

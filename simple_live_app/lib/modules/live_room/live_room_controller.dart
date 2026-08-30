@@ -38,7 +38,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   late LiveDanmaku liveDanmaku;
   late DanmakuMask rustDanmakuMask;
 
-
   List<LiveMessage> danmakuBuffer = [];
   Timer? danmakuTimer;
   bool _isProcessingBuffer = false;
@@ -64,7 +63,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   Rx<LiveRoomDetail?> detail = Rx<LiveRoomDetail?>(null);
   var online = 0.obs;
   var fansCount = 0.obs;
-  var vipCount = 0.obs;
+  final RxnInt vipCount = RxnInt();
   var followed = false.obs;
   var liveStatus = false.obs;
   RxList<LiveSuperChatMessage> superChats = RxList<LiveSuperChatMessage>();
@@ -173,7 +172,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
       final batchMessages = batch.map((e) => e.message).toList();
       final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final allowedResults = await rustDanmakuMask.allowListBatch(texts: batchMessages, nowMs: BigInt.from(nowMs));
+      final allowedResults = await rustDanmakuMask.allowListBatch(
+          texts: batchMessages, nowMs: BigInt.from(nowMs));
 
       final filteredBatch = <LiveMessage>[];
       for (int i = 0; i < batch.length; i++) {
@@ -314,7 +314,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       }
 
       //  messages.length>n 预加载部分弹幕后启用去重功能
-      if (AppSettingsController.instance.danmakuMaskEnable.value&&
+      if (AppSettingsController.instance.danmakuMaskEnable.value &&
           messages.length > 50) {
         danmakuBuffer.add(msg);
       } else {
@@ -346,51 +346,42 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
     } else if (msg.type == LiveMessageType.gift) {
-      // 礼物消息：在弹幕区显示
-      if (messages.length > 200 && !disableAutoScroll.value) {
-        messages.removeAt(0);
+      // 保留礼物原始类型及结构化 data，供后续礼物卡片、统计或特效复用。
+      _addEventMessage(msg);
+    } else if (msg.type == LiveMessageType.vipCount) {
+      final count = _parseVipCount(msg.data);
+      if (count != null) {
+        // 贵宾总数是服务端快照，只能覆盖，不能通过进场事件推算。
+        vipCount.value = count;
       }
-      messages.add(
-        LiveMessage(
-          type: LiveMessageType.chat,
-          userName: "LiveSysMessage",
-          message: msg.message,
-          color: LiveMessageColor(255, 215, 0), // 金色
-        ),
-      );
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => chatScrollToBottom(),
-      );
     } else if (msg.type == LiveMessageType.vipEnter) {
-      if (site.id == Constant.kHuya) {
-        // 虎牙 6210/6211/6213 会推送贵宾总数；旧进场消息仍按进入事件递增。
-        final data = msg.data;
-        if (data is Map && data["count"] is num) {
-          vipCount.value = (data["count"] as num).toInt();
-        } else {
-          vipCount.value++;
-        }
-        if (msg.message.isEmpty) {
-          return;
-        }
-      } else {
-        vipCount.value++;
+      // vipEnter 只代表单个进场事件，不参与贵宾总数计算。
+      if (msg.message.isNotEmpty) {
+        _addEventMessage(msg);
       }
-      if (messages.length > 200 && !disableAutoScroll.value) {
-        messages.removeAt(0);
-      }
-      messages.add(
-        LiveMessage(
-          type: LiveMessageType.chat,
-          userName: "LiveSysMessage",
-          message: msg.message,
-          color: LiveMessageColor(138, 43, 226), // 紫色
-        ),
-      );
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => chatScrollToBottom(),
-      );
     }
+  }
+
+  int? _parseVipCount(dynamic data) {
+    dynamic value = data;
+    if (data is Map) {
+      value = data["count"];
+    }
+    if (value is num) {
+      final count = value.toInt();
+      return count >= 0 ? count : null;
+    }
+    return null;
+  }
+
+  void _addEventMessage(LiveMessage msg) {
+    if (messages.length > 200 && !disableAutoScroll.value) {
+      messages.removeAt(0);
+    }
+    messages.add(msg);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => chatScrollToBottom(),
+    );
   }
 
   /// 添加一条系统消息
@@ -420,6 +411,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     try {
       SmartDialog.showLoading(msg: "");
       loadError.value = false;
+      // 虎牙贵宾数必须等待 WebSocket 快照，加载/刷新期间保持未知态。
+      vipCount.value = site.id == Constant.kHuya ? null : 0;
       addSysMsg("正在读取直播间信息");
       detail.value = await site.liveSite.getRoomDetail(roomId: roomId);
 
@@ -458,7 +451,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
           FollowService.instance.getFollowExist("${site.id}_$roomId");
       online.value = detail.value!.online;
       fansCount.value = detail.value!.fansCount ?? 0;
-      vipCount.value = 0; // 贵宾数从WebSocket实时计数
+      if (site.id != Constant.kHuya) {
+        vipCount.value = detail.value!.vipCount ?? 0;
+      }
       liveStatus.value = detail.value!.status || detail.value!.isRecord;
       if (liveStatus.value) {
         getPlayQualites();
@@ -473,7 +468,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       Log.logPrint(e);
       //SmartDialog.showToast(e.toString());
       loadError.value = true;
-      if(e is Error){
+      if (e is Error) {
         error = e;
       }
     } finally {
@@ -1108,6 +1103,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
     rxSite.value = site;
     rxRoomId.value = roomId;
+    // 房间身份切换后立即清空旧房间快照，避免播放器停止期间短暂串房。
+    vipCount.value = site.id == Constant.kHuya ? null : 0;
 
     // 清除全部消息
     liveDanmaku.stop();

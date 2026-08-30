@@ -1,5 +1,7 @@
 // ignore_for_file: no_leading_underscores_for_local_identifiers
 
+import 'dart:typed_data';
+
 import 'package:tars_dart/tars/codec/tars_input_stream.dart';
 import 'package:tars_dart/tars/codec/tars_output_stream.dart';
 import 'package:tars_dart/tars/codec/tars_struct.dart';
@@ -9,6 +11,9 @@ class HYPushMessage extends TarsStruct {
   int uri = 0;
   List<int> msg = <int>[];
   int protocolType = 0;
+  String groupId = "";
+  int messageId = 0;
+  int messageTag = 0;
 
   @override
   void readFrom(TarsInputStream _is) {
@@ -16,10 +21,21 @@ class HYPushMessage extends TarsStruct {
     uri = _is.read(uri, 1, false);
     msg = _is.readBytes(2, false);
     protocolType = _is.read(protocolType, 3, false);
+    groupId = _is.read(groupId, 4, false);
+    messageId = _is.read(messageId, 5, false);
+    messageTag = _is.read(messageTag, 6, false);
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(pushType, 0);
+    _os.write(uri, 1);
+    _os.write(Uint8List.fromList(msg), 2);
+    _os.write(protocolType, 3);
+    _os.write(groupId, 4);
+    _os.write(messageId, 5);
+    _os.write(messageTag, 6);
+  }
 
   @override
   Object deepCopy() {
@@ -27,7 +43,10 @@ class HYPushMessage extends TarsStruct {
       ..pushType = pushType
       ..uri = uri
       ..msg = List<int>.from(msg)
-      ..protocolType = protocolType;
+      ..protocolType = protocolType
+      ..groupId = groupId
+      ..messageId = messageId
+      ..messageTag = messageTag;
   }
 
   @override
@@ -43,7 +62,7 @@ class HYSender extends TarsStruct {
   @override
   void readFrom(TarsInputStream _is) {
     uid = _is.read(uid, 0, false);
-    lMid = _is.read(lMid, 0, false);
+    lMid = _is.read(lMid, 1, false);
     nickName = _is.read(nickName, 2, false);
     gender = _is.read(gender, 3, false);
   }
