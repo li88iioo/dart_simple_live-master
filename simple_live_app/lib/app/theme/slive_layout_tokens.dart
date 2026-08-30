@@ -11,10 +11,10 @@ abstract final class SliveRadii {
 }
 
 abstract final class SliveMotion {
-  static const Duration press = Duration(milliseconds: 120);
-  static const Duration selection = Duration(milliseconds: 240);
-  static const Duration panel = Duration(milliseconds: 300);
-  static const Duration route = Duration(milliseconds: 360);
+  static const Duration press = Duration(milliseconds: 90);
+  static const Duration selection = Duration(milliseconds: 180);
+  static const Duration panel = Duration(milliseconds: 220);
+  static const Duration route = Duration(milliseconds: 200);
 
   static const Curve standard = Curves.easeOutCubic;
   static const Curve emphasized = Curves.easeInOutCubic;

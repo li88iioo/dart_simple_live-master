@@ -110,11 +110,13 @@ class BasePageController<T> extends BaseController {
   }
 
   void scrollToTopOrRefresh() {
-    if (scrollController.offset > 0) {
+    if (scrollController.hasClients && scrollController.offset > 0) {
+      final distance = scrollController.offset;
+      final durationMs = (220 + distance / 24).round().clamp(220, 520);
       scrollController.animateTo(
         0,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.linear,
+        duration: Duration(milliseconds: durationMs),
+        curve: Curves.easeOutCubic,
       );
     } else {
       easyRefreshController.callRefresh();

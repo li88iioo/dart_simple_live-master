@@ -12,8 +12,11 @@ class HomeController extends GetxController
     with GetSingleTickerProviderStateMixin {
   late TabController tabController;
   HomeController() {
-    tabController =
-        TabController(length: Sites.supportSites.length, vsync: this);
+    tabController = TabController(
+      length: Sites.supportSites.length,
+      vsync: this,
+      animationDuration: const Duration(milliseconds: 150),
+    );
   }
 
   StreamSubscription<dynamic>? streamSubscription;
@@ -31,8 +34,17 @@ class HomeController extends GetxController
     for (var site in Sites.supportSites) {
       Get.put(HomeListController(site), tag: site.id);
     }
+    tabController.addListener(_loadSelectedTab);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSelectedTab());
 
     super.onInit();
+  }
+
+  void _loadSelectedTab() {
+    if (isClosed || Sites.supportSites.isEmpty) return;
+    final index = tabController.index.clamp(0, Sites.supportSites.length - 1);
+    Get.find<HomeListController>(tag: Sites.supportSites[index].id)
+        .ensureInitialLoad();
   }
 
   void refreshOrScrollTop() {
@@ -50,6 +62,7 @@ class HomeController extends GetxController
   @override
   void onClose() {
     streamSubscription?.cancel();
+    tabController.removeListener(_loadSelectedTab);
     tabController.dispose();
     super.onClose();
   }

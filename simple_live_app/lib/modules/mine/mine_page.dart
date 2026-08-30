@@ -8,8 +8,6 @@ import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/settings/appstyle_settings/appstyle_setting_contorller.dart';
 import 'package:simple_live_app/routes/route_path.dart';
-import 'package:simple_live_app/services/bilibili_account_service.dart';
-import 'package:simple_live_app/services/platform_service.dart';
 import 'package:simple_live_app/services/signalr_service.dart';
 import 'package:simple_live_app/widgets/glass/slive_glass_surface.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -18,7 +16,6 @@ class MinePage extends StatelessWidget {
   const MinePage({super.key});
 
   static const _historyColor = Color(0xFF5B9BEA);
-  static const _accountColor = Color(0xFF62B486);
   static const _syncColor = Color(0xFF50B4AC);
   static const _linkColor = Color(0xFFE39B56);
   static const _appearanceColor = Color(0xFF788BE1);
@@ -76,14 +73,6 @@ class MinePage extends StatelessWidget {
                             title: '观看记录',
                             subtitle: const _TileSubtitle('继续查看浏览过的直播间'),
                             onTap: () => Get.toNamed(RoutePath.kHistory),
-                          ),
-                          _MineActionTile(
-                            icon: Remix.account_circle_line,
-                            iconColor: _accountColor,
-                            title: '账号管理',
-                            subtitle: const _BoundPlatformStatus(),
-                            onTap: () =>
-                                Get.toNamed(RoutePath.kSettingsAccount),
                           ),
                           _MineActionTile(
                             icon: Icons.devices_rounded,
@@ -177,7 +166,7 @@ class MinePage extends StatelessWidget {
                             icon: Remix.github_line,
                             iconColor: _githubColor,
                             title: '开源主页',
-                            subtitle: const _TileSubtitle('查看项目源码与许可证'),
+                            subtitle: const _TileSubtitle('查看项目源码与发布信息'),
                             onTap: () {
                               launchUrlString(
                                 'https://github.com/slotsun/dart_simple_live',
@@ -208,18 +197,17 @@ class MinePage extends StatelessWidget {
 
   Widget _buildProfileCard(BuildContext context) {
     final colors = context.sliveColors;
-    final primary = Theme.of(context).colorScheme.primary;
 
     return Semantics(
       button: true,
-      label: '关于 Slive，版本 ${Utils.packageInfo.version}',
+      label: '账号管理',
       child: SliveGlassSurface(
         variant: SliveGlassVariant.panel,
         radius: SliveRadii.panel,
         enableBackdropBlur: true,
-        onTap: _showAboutDialog,
+        onTap: () => Get.toNamed(RoutePath.kSettingsAccount),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 112),
+          constraints: const BoxConstraints(minHeight: 88),
           child: Stack(
             children: [
               Positioned(
@@ -262,52 +250,24 @@ class MinePage extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(18, 17, 14, 17),
+                padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
                 child: Row(
                   children: [
-                    const _SliveWaveBadge(size: 68),
-                    const SizedBox(width: 16),
+                    const _SliveWaveBadge(size: 56),
+                    const SizedBox(width: 14),
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Slive',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(
+                      child: Text(
+                        '账号管理',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
                                   color: colors.textPrimary,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.35,
-                                  height: 1.08,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.18,
+                                  height: 1.15,
                                 ),
-                          ),
-                          const SizedBox(height: 7),
-                          Text(
-                            '我就默默看你表演',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: colors.textSecondary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.2,
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          _ProfilePill(
-                            label: '聚合直播 · ${Utils.packageInfo.version}',
-                            color: primary,
-                          ),
-                        ],
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -318,17 +278,6 @@ class MinePage extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showAboutDialog() {
-    Get.dialog(
-      AboutDialog(
-        applicationIcon: const _SliveWaveBadge(size: 52),
-        applicationName: 'Slive',
-        applicationVersion: '我就默默看你表演',
-        applicationLegalese: 'Ver ${Utils.packageInfo.version}',
       ),
     );
   }
@@ -544,31 +493,6 @@ class _TileSubtitle extends StatelessWidget {
   }
 }
 
-class _BoundPlatformStatus extends StatelessWidget {
-  const _BoundPlatformStatus();
-
-  @override
-  Widget build(BuildContext context) {
-    final hasBilibili = Get.isRegistered<BiliBiliAccountService>();
-    final hasPlatformService = Get.isRegistered<PlatformService>();
-
-    if (!hasBilibili && !hasPlatformService) {
-      return const _TileSubtitle('账号状态可在管理页查看');
-    }
-
-    return Obx(() {
-      var count = 0;
-      if (hasBilibili && BiliBiliAccountService.instance.logined.value) {
-        count++;
-      }
-      if (hasPlatformService && PlatformService.instance.douyinLogined.value) {
-        count++;
-      }
-      return _TileSubtitle('已绑定 $count 个平台');
-    });
-  }
-}
-
 class _AppearanceStatus extends StatelessWidget {
   const _AppearanceStatus();
 
@@ -584,46 +508,6 @@ class _AppearanceStatus extends StatelessWidget {
     return Obx(
       () => _TileSubtitle(
         '$tone · ${AppStyleSettingController.instance.glassMode.value.label}',
-      ),
-    );
-  }
-}
-
-class _ProfilePill extends StatelessWidget {
-  const _ProfilePill({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.sliveColors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 190),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: Color.alphaBlend(
-          color.withValues(alpha: isDark ? 0.13 : 0.08),
-          colors.glassBase.withValues(alpha: isDark ? 0.14 : 0.34),
-        ),
-        borderRadius: BorderRadius.circular(SliveRadii.pill),
-        border: Border.all(
-          color: color.withValues(alpha: isDark ? 0.16 : 0.10),
-        ),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: colors.textSecondary,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.15,
-              height: 1.1,
-            ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/constant.dart';
+import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/modules/settings/appstyle_settings/appstyle_setting_contorller.dart';
 import 'package:simple_live_app/widgets/glass/slive_page_scaffold.dart';
@@ -61,6 +62,21 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
     );
   }
 
+  Future<void> _showCustomBackgroundPicker(BuildContext context) async {
+    final color = await showModalBottomSheet<Color>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _BackgroundColorPickerSheet(
+        initialColor: Color(controller.customBackgroundColor.value),
+      ),
+    );
+    if (color != null) {
+      await controller.setCustomBackgroundColor(color);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SlivePageScaffold(
@@ -81,7 +97,7 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
           SettingsCard(
             child: Obx(
               () => RadioGroup<int>(
-                groupValue: controller.themeMode.value,
+                groupValue: AppSettingsController.instance.themeMode.value,
                 onChanged: (value) {
                   controller.setTheme(value ?? 0);
                 },
@@ -112,7 +128,7 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
           ),
           const _SectionLabel(
             title: '玻璃材质',
-            description: '通透强调环境折射，柔和降低模糊以兼顾续航',
+            description: '材质渲染不依赖 Android 版本；柔和模式优先流畅与续航',
           ),
           SettingsCard(
             child: Obx(
@@ -126,14 +142,13 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
                 },
                 onChanged: (mode) {
                   controller.setGlassMode(mode);
-                  Get.forceAppUpdate();
                 },
               ),
             ),
           ),
           const _SectionLabel(
-            title: '环境色',
-            description: '让系统主色影响玻璃控件与环境光晕',
+            title: '强调色',
+            description: '用于按钮、选中态和环境光，不会直接染色页面背景',
           ),
           SettingsCard(
             child: Obx(
@@ -143,11 +158,9 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
                 children: [
                   SettingsSwitch(
                     value: controller.isDynamic.value,
-                    title: '动态取色',
-                    onChanged: (value) {
-                      controller.setIsDynamic(value);
-                      Get.forceAppUpdate();
-                    },
+                    title: '强调色跟随系统',
+                    subtitle: '从壁纸提取控件强调色；关闭后使用下方手动颜色',
+                    onChanged: controller.setIsDynamic,
                   ),
                   if (!controller.isDynamic.value) ...[
                     const _SettingsDivider(),
@@ -167,16 +180,11 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
                           Color(0xFFFF9800),
                         ]
                             .map(
-                              (color) => Obx(
-                                () => _ThemeColorSwatch(
-                                  color: color,
-                                  selected:
-                                      controller.styleColor.value == color.v,
-                                  onTap: () {
-                                    controller.setStyleColor(color.v);
-                                    Get.forceAppUpdate();
-                                  },
-                                ),
+                              (color) => _ThemeColorSwatch(
+                                color: color,
+                                selected:
+                                    controller.styleColor.value == color.v,
+                                onTap: () => controller.setAccentColor(color.v),
                               ),
                             )
                             .toList(growable: false),
@@ -185,6 +193,96 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
                   ],
                 ],
               ),
+            ),
+          ),
+          const _SectionLabel(
+            title: '浅色背景',
+            description: '背景与强调色独立，保持低饱和和稳定的文字对比度',
+          ),
+          SettingsCard(
+            child: Obx(
+              () {
+                final source = controller.backgroundSource.value;
+                final customColor =
+                    Color(controller.customBackgroundColor.value);
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RadioGroup<SliveBackgroundSource>(
+                      groupValue: source,
+                      onChanged: (value) {
+                        if (value != null) {
+                          controller.setBackgroundSource(value);
+                        }
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (var index = 0;
+                              index < SliveBackgroundSource.values.length;
+                              index++) ...[
+                            RadioListTile<SliveBackgroundSource>(
+                              value: SliveBackgroundSource.values[index],
+                              title: Text(
+                                SliveBackgroundSource.values[index].label,
+                              ),
+                              subtitle: Text(
+                                SliveBackgroundSource.values[index].description,
+                              ),
+                              secondary: _BackgroundSourceBadge(
+                                source: SliveBackgroundSource.values[index],
+                                customColor: customColor,
+                                preset: controller.backgroundPreset.value,
+                              ),
+                              contentPadding:
+                                  const EdgeInsets.fromLTRB(12, 2, 16, 2),
+                            ),
+                            if (index !=
+                                SliveBackgroundSource.values.length - 1)
+                              const _SettingsDivider(),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (source == SliveBackgroundSource.preset) ...[
+                      const _SettingsDivider(),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final itemWidth = (constraints.maxWidth - 20) / 3;
+                            return Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: SliveBackgroundPreset.values
+                                  .map(
+                                    (preset) => _BackgroundPresetTile(
+                                      preset: preset,
+                                      width: itemWidth,
+                                      selected:
+                                          controller.backgroundPreset.value ==
+                                              preset,
+                                      onTap: () => controller
+                                          .setBackgroundPreset(preset),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                    if (source == SliveBackgroundSource.custom) ...[
+                      const _SettingsDivider(),
+                      _CustomBackgroundTile(
+                        color: customColor,
+                        onTap: () => _showCustomBackgroundPicker(context),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           const _SectionLabel(
@@ -330,6 +428,426 @@ class _SettingsDivider extends StatelessWidget {
   }
 }
 
+class _BackgroundSourceBadge extends StatelessWidget {
+  const _BackgroundSourceBadge({
+    required this.source,
+    required this.customColor,
+    required this.preset,
+  });
+
+  final SliveBackgroundSource source;
+  final Color customColor;
+  final SliveBackgroundPreset preset;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.sliveColors;
+    final palette = switch (source) {
+      SliveBackgroundSource.systemDynamic => SliveBackgroundPalette(
+          start: Color.lerp(colors.backgroundStart, colors.ambientPink, 0.16)!,
+          base: Color.lerp(colors.backgroundBase, colors.ambientBlue, 0.14)!,
+          end: Color.lerp(colors.backgroundEnd, colors.ambientOrange, 0.12)!,
+        ),
+      SliveBackgroundSource.preset => preset.lightPalette,
+      SliveBackgroundSource.custom =>
+        SliveBackgroundPalette.fromLightBase(customColor),
+    };
+
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [palette.start, palette.base, palette.end],
+        ),
+        border: Border.all(
+          color: colors.glassBorder.withValues(alpha: 0.76),
+        ),
+      ),
+      child: Icon(
+        switch (source) {
+          SliveBackgroundSource.systemDynamic => Icons.auto_awesome_rounded,
+          SliveBackgroundSource.preset => Icons.palette_outlined,
+          SliveBackgroundSource.custom => Icons.tune_rounded,
+        },
+        size: 19,
+        color: colors.textSecondary.withValues(alpha: 0.78),
+      ),
+    );
+  }
+}
+
+class _BackgroundPresetTile extends StatelessWidget {
+  const _BackgroundPresetTile({
+    required this.preset,
+    required this.width,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final SliveBackgroundPreset preset;
+  final double width;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.sliveColors;
+    final primary = Theme.of(context).colorScheme.primary;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '背景预设：${preset.label}',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Ink(
+            width: width,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? primary.withValues(alpha: 0.055)
+                  : colors.glassBase.withValues(alpha: 0.24),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: selected
+                    ? primary.withValues(alpha: 0.52)
+                    : colors.glassBorder.withValues(alpha: 0.64),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(13),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [preset.start, preset.base, preset.end],
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 160),
+                    opacity: selected ? 1 : 0,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.84),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: 17,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  preset.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: selected ? primary : colors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomBackgroundTile extends StatelessWidget {
+  const _CustomBackgroundTile({
+    required this.color,
+    required this.onTap,
+  });
+
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.sliveColors;
+    final palette = SliveBackgroundPalette.fromLightBase(color);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 13, 12, 13),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 42,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [palette.start, palette.base, palette.end],
+                ),
+                border: Border.all(
+                  color: colors.glassBorder.withValues(alpha: 0.82),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '自定义柔和背景',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '仅允许高明度与低饱和，确保内容清晰',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.textTertiary,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: onTap,
+              icon: const Icon(Icons.tune_rounded, size: 18),
+              label: const Text('调整'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BackgroundColorPickerSheet extends StatefulWidget {
+  const _BackgroundColorPickerSheet({required this.initialColor});
+
+  final Color initialColor;
+
+  @override
+  State<_BackgroundColorPickerSheet> createState() =>
+      _BackgroundColorPickerSheetState();
+}
+
+class _BackgroundColorPickerSheetState
+    extends State<_BackgroundColorPickerSheet> {
+  late double _hue;
+  late double _saturation;
+  late double _lightness;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = HSLColor.fromColor(
+      SliveBackgroundStyle.normalizeLightColor(widget.initialColor),
+    );
+    _hue = initial.hue;
+    _saturation = initial.saturation;
+    _lightness = initial.lightness;
+  }
+
+  Color get _color => HSLColor.fromAHSL(
+        1,
+        _hue,
+        _saturation.clamp(0.0, 0.15).toDouble(),
+        _lightness.clamp(0.88, 0.96).toDouble(),
+      ).toColor();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.sliveColors;
+    final palette = SliveBackgroundPalette.fromLightBase(_color);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + bottomInset),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '自定义浅色背景',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '颜色会自动限制在舒适的高明度、低饱和区间，避免与强调色冲突。',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.textTertiary,
+                      height: 1.4,
+                    ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                height: 104,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [palette.start, palette.base, palette.end],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.84),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    borderRadius: BorderRadius.circular(SliveRadii.pill),
+                  ),
+                  child: Text(
+                    '柔润背景预览',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: const Color(0xFF3E3B38),
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              _ColorParameterSlider(
+                label: '色相',
+                valueLabel: '${_hue.round()}°',
+                value: _hue,
+                min: 0,
+                max: 360,
+                activeColor: _color,
+                onChanged: (value) => setState(() => _hue = value),
+              ),
+              _ColorParameterSlider(
+                label: '饱和度',
+                valueLabel: '${(_saturation * 100).round()}%',
+                value: _saturation,
+                min: 0,
+                max: 0.15,
+                activeColor: _color,
+                onChanged: (value) => setState(() => _saturation = value),
+              ),
+              _ColorParameterSlider(
+                label: '明度',
+                valueLabel: '${(_lightness * 100).round()}%',
+                value: _lightness,
+                min: 0.88,
+                max: 0.96,
+                activeColor: _color,
+                onChanged: (value) => setState(() => _lightness = value),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(_color),
+                    child: const Text('应用背景'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorParameterSlider extends StatelessWidget {
+  const _ColorParameterSlider({
+    required this.label,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.activeColor,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final Color activeColor;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.sliveColors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const Spacer(),
+              Text(
+                valueLabel,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colors.textTertiary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: value,
+            min: min,
+            max: max,
+            activeColor: activeColor,
+            inactiveColor: colors.divider.withValues(alpha: 0.13),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ThemeColorSwatch extends StatelessWidget {
   const _ThemeColorSwatch({
     required this.color,
@@ -343,14 +861,15 @@ class _ThemeColorSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.sliveColors;
     final foreground =
-        color.computeLuminance() > 0.58 ? Colors.black54 : Colors.white;
+        color.computeLuminance() > 0.58 ? colors.textPrimary : Colors.white;
     return Semantics(
       button: true,
       selected: selected,
-      label: '选择主题颜色',
+      label: '选择强调色',
       child: Tooltip(
-        message: selected ? '当前主题颜色' : '应用此主题颜色',
+        message: selected ? '当前强调色' : '应用此强调色',
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -366,23 +885,15 @@ class _ThemeColorSwatch extends StatelessWidget {
                   end: Alignment.bottomRight,
                   colors: [
                     Color.lerp(color, Colors.white, 0.12)!,
-                    Color.lerp(color, Colors.black, 0.06)!,
+                    Color.lerp(color, colors.textPrimary, 0.04)!,
                   ],
                 ),
                 border: Border.all(
                   color: selected
-                      ? foreground.withValues(alpha: 0.82)
-                      : context.sliveColors.glassBorder.withValues(alpha: 0.58),
-                  width: selected ? 2 : 1,
+                      ? Colors.white.withValues(alpha: 0.94)
+                      : colors.glassBorder.withValues(alpha: 0.68),
+                  width: selected ? 1.6 : 1,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withValues(alpha: selected ? 0.28 : 0.14),
-                    blurRadius: selected ? 14 : 8,
-                    spreadRadius: -4,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
               ),
               child: Icon(
                 Icons.check_rounded,

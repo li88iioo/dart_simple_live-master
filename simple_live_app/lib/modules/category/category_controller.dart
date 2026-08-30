@@ -12,8 +12,11 @@ class CategoryController extends GetxController
     with GetSingleTickerProviderStateMixin {
   late TabController tabController;
   CategoryController() {
-    tabController =
-        TabController(length: Sites.supportSites.length, vsync: this);
+    tabController = TabController(
+      length: Sites.supportSites.length,
+      vsync: this,
+      animationDuration: const Duration(milliseconds: 150),
+    );
   }
   StreamSubscription<dynamic>? streamSubscription;
   @override

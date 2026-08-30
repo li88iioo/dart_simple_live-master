@@ -26,6 +26,7 @@ class SliveGlassSurface extends StatelessWidget {
     this.color,
     this.borderColor,
     this.shadowColor,
+    this.showShadow,
     this.clipBehavior = Clip.antiAlias,
   });
 
@@ -41,6 +42,7 @@ class SliveGlassSurface extends StatelessWidget {
   final Color? color;
   final Color? borderColor;
   final Color? shadowColor;
+  final bool? showShadow;
   final Clip clipBehavior;
 
   @override
@@ -66,10 +68,15 @@ class SliveGlassSurface extends StatelessWidget {
           alpha: materials.borderOpacity * (isDark ? 0.74 : 1),
         );
     final resolvedShadow = shadowColor ??
-        const Color(0xFF8E7E6E).withValues(
-          alpha: visual.shadowOpacity,
-        );
-    final blurEnabled = enableBackdropBlur ?? visual.blurByDefault;
+        Color.lerp(colors.backgroundEnd, theme.colorScheme.primary, 0.12)!
+            .withValues(alpha: visual.shadowOpacity);
+    final requestedBlur = enableBackdropBlur ?? visual.blurByDefault;
+    // 柔和材质使用高遮罩渐变模拟磨砂，不启用实时 BackdropFilter。
+    // 这能避免滚动列表与视频画面每帧重新采样背景，显著降低 GPU 合成压力。
+    final blurEnabled = requestedBlur && materials.mode == SliveGlassMode.clear;
+    final shadowEnabled = (showShadow ?? visual.hasShadow) &&
+        materials.mode == SliveGlassMode.clear &&
+        resolvedShadow.a > 0.001;
 
     Widget content = padding == null
         ? child
@@ -79,16 +86,32 @@ class SliveGlassSurface extends StatelessWidget {
           );
 
     if (onTap != null || onLongPress != null) {
-      content = Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          borderRadius: borderRadius,
-          child: content,
-        ),
+      content = InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: borderRadius,
+        splashFactory: NoSplash.splashFactory,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: theme.colorScheme.primary.withValues(alpha: 0.035),
+        focusColor: Colors.transparent,
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.pressed)) {
+            return theme.colorScheme.primary.withValues(alpha: 0.055);
+          }
+          return Colors.transparent;
+        }),
+        child: content,
       );
     }
+
+    // 始终提供本地透明 Material。设置项、TabBar 等后代 Ink 控件因此不会
+    // 向外层 Scaffold 寻找材质并绘制出越界的黑色涟漪/焦点环。
+    content = Material(
+      type: MaterialType.transparency,
+      clipBehavior: Clip.none,
+      child: content,
+    );
 
     Widget inner = DecoratedBox(
       decoration: BoxDecoration(
@@ -124,7 +147,7 @@ class SliveGlassSurface extends StatelessWidget {
       constraints: constraints,
       decoration: BoxDecoration(
         borderRadius: borderRadius,
-        boxShadow: visual.hasShadow
+        boxShadow: shadowEnabled
             ? [
                 BoxShadow(
                   color: resolvedShadow,
@@ -132,13 +155,6 @@ class SliveGlassSurface extends StatelessWidget {
                   spreadRadius: visual.shadowSpread,
                   offset: visual.shadowOffset,
                 ),
-                if (!isDark && variant != SliveGlassVariant.pill)
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.025),
-                    blurRadius: visual.shadowBlur + 10,
-                    spreadRadius: -8,
-                    offset: const Offset(0, 12),
-                  ),
               ]
             : null,
       ),
@@ -170,7 +186,7 @@ class _GlassVisual {
           opacity: materials.cardOpacity,
           blurSigma: materials.backdropBlur,
           blurByDefault: false,
-          hasShadow: true,
+          hasShadow: false,
           shadowOpacity: materials.shadowOpacity,
           shadowBlur: 20,
           shadowSpread: -4,
@@ -181,7 +197,7 @@ class _GlassVisual {
           opacity: materials.panelOpacity,
           blurSigma: materials.backdropBlur,
           blurByDefault: false,
-          hasShadow: true,
+          hasShadow: false,
           shadowOpacity: materials.shadowOpacity,
           shadowBlur: 28,
           shadowSpread: -6,
@@ -192,7 +208,7 @@ class _GlassVisual {
           opacity: materials.pillOpacity,
           blurSigma: materials.backdropBlur,
           blurByDefault: false,
-          hasShadow: true,
+          hasShadow: false,
           shadowOpacity: materials.shadowOpacity * 0.72,
           shadowBlur: 16,
           shadowSpread: -6,

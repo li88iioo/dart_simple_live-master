@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:floating/floating.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:lottie/lottie.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -47,7 +49,11 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               controller.exitFull();
             },
             child: Scaffold(
-              body: buildMediaPlayer(),
+              body: buildMediaPlayer(
+                giftPlacement: controller.smallWindowState.value
+                    ? null
+                    : HuyaGiftOverlayPlacement.player,
+              ),
             ),
           );
         } else {
@@ -188,7 +194,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         ),
         buildUserProfile(context),
         buildMessageArea(context),
-        buildBottomActions(context),
       ],
     );
   }
@@ -216,7 +221,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ),
           ),
         ),
-        buildBottomActions(context),
       ],
     );
   }
@@ -233,7 +237,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     );
   }
 
-  Widget buildMediaPlayer() {
+  Widget buildMediaPlayer({HuyaGiftOverlayPlacement? giftPlacement}) {
     var boxFit = BoxFit.contain;
     double? aspectRatio;
     if (AppSettingsController.instance.scaleMode.value == 0) {
@@ -266,7 +270,11 @@ class LiveRoomPage extends GetView<LiveRoomController> {
           // 自己实现
           wakelock: false,
         ),
-        HuyaGiftDanmakuOverlay(controller: controller),
+        if (giftPlacement != null)
+          HuyaGiftDanmakuOverlay(
+            controller: controller,
+            placement: giftPlacement,
+          ),
         Obx(
           () => Visibility(
             visible: !controller.liveStatus.value,
@@ -543,105 +551,16 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     double horizontalPadding = 12,
   }) {
     return Expanded(
-      child: DefaultTabController(
-        length: 4,
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                  horizontalPadding, 4, horizontalPadding, 2),
-              child: SizedBox(
-                height: 42,
-                child: SliveGlassSurface(
-                  variant: SliveGlassVariant.pill,
-                  enableBackdropBlur: true,
-                  child: TabBar(
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    labelPadding: EdgeInsets.zero,
-                    dividerColor: Colors.transparent,
-                    indicator: BoxDecoration(
-                      color: context.sliveColors.glassStrong.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark
-                            ? 0.16
-                            : 0.82,
-                      ),
-                      borderRadius: BorderRadius.circular(SliveRadii.pill),
-                      border: Border.all(
-                        color: context.sliveColors.glassBorder.withValues(
-                          alpha: context.sliveMaterials.borderOpacity * 0.72,
-                        ),
-                      ),
-                    ),
-                    tabs: [
-                      const Tab(text: "聊天"),
-                      Tab(
-                        child: Obx(
-                          () => Text(
-                            controller.superChats.isNotEmpty
-                                ? "SC(${controller.superChats.length})"
-                                : "SC",
-                          ),
-                        ),
-                      ),
-                      const Tab(text: "关注"),
-                      const Tab(text: "设置"),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  Obx(() {
-                    final gap =
-                        AppSettingsController.instance.chatTextGap.value * 2;
-                    return Stack(
-                      children: [
-                        ListView.separated(
-                          controller: controller.scrollController,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          addAutomaticKeepAlives: false,
-                          separatorBuilder: (_, i) => SizedBox(height: gap),
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
-                          itemCount: controller.messages.length,
-                          itemBuilder: (_, i) {
-                            final item = controller.messages[i];
-                            return buildMessageItem(context, item);
-                          },
-                        ),
-                        if (controller.disableAutoScroll.value)
-                          Positioned(
-                            right: 12,
-                            bottom: 12,
-                            child: SliveGlassSurface(
-                              variant: SliveGlassVariant.pill,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              onTap: controller.resumeChatAutoScroll,
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.expand_more, size: 18),
-                                  SizedBox(width: 4),
-                                  Text("最新"),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  }),
-                  buildSuperChats(),
-                  buildFollowList(),
-                  buildSettings(),
-                ],
-              ),
-            ),
-          ],
+      child: SafeArea(
+        top: false,
+        child: _LiveRoomMessageArea(
+          controller: controller,
+          horizontalPadding: horizontalPadding,
+          messageItemBuilder: buildMessageItem,
+          superChatsBuilder: buildSuperChats,
+          followListBuilder: buildFollowList,
+          settingsBuilder: buildSettings,
+          bottomActionsBuilder: () => buildBottomActions(context),
         ),
       ),
     );
@@ -1050,5 +969,515 @@ class LiveRoomPage extends GetView<LiveRoomController> {
       return "${m.toString().padLeft(2, '0')}分钟${s.toString().padLeft(2, '0')}秒";
     }
     return "${s.toString().padLeft(2, '0')}秒";
+  }
+}
+
+/// 直播间 Tab 的轻量视口。
+///
+/// 使用禁用手势的 [PageView] 作为惰性 Sliver 视口：任一时刻只有当前页
+/// 参与布局与绘制，已访问页面由 keep-alive bucket 保存状态，不会像
+/// [Offstage] / [IndexedStack] 那样继续挂在活动 RenderObject 子链中布局。
+/// 索引变化直接跳页，只有新页面执行短距离 transform 合成动画。
+class LiveRoomTabViewport extends StatefulWidget {
+  const LiveRoomTabViewport({
+    super.key,
+    required this.index,
+    required this.children,
+    this.duration = const Duration(milliseconds: 160),
+    this.curve = Curves.easeOutCubic,
+  });
+
+  final int index;
+  final List<Widget> children;
+  final Duration duration;
+  final Curve curve;
+
+  @override
+  State<LiveRoomTabViewport> createState() => _LiveRoomTabViewportState();
+}
+
+class _LiveRoomTabViewportState extends State<LiveRoomTabViewport>
+    with SingleTickerProviderStateMixin {
+  static const double _enterOffset = 8;
+
+  late final AnimationController _animationController;
+  late final ValueNotifier<int> _activeIndexNotifier;
+  late final PageController _pageController;
+  late int _currentIndex;
+  int _direction = 1;
+  bool _pageSyncScheduled = false;
+
+  int _safeIndex(int value) {
+    if (widget.children.isEmpty) return 0;
+    return value.clamp(0, widget.children.length - 1);
+  }
+
+  bool get _reduceMotion =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = _safeIndex(widget.index);
+    _activeIndexNotifier = ValueNotifier<int>(_currentIndex);
+    _pageController = PageController(initialPage: _currentIndex);
+    _animationController = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+      value: 1,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_reduceMotion && _animationController.isAnimating) {
+      _animationController.value = 1;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LiveRoomTabViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.duration != widget.duration) {
+      _animationController.duration = widget.duration;
+    }
+
+    if (widget.children.isEmpty) {
+      _currentIndex = 0;
+      _activeIndexNotifier.value = 0;
+      _animationController.value = 1;
+      return;
+    }
+
+    final nextIndex = _safeIndex(widget.index);
+    if (nextIndex == _currentIndex) {
+      return;
+    }
+
+    _direction = nextIndex > _currentIndex ? 1 : -1;
+    _currentIndex = nextIndex;
+    // 先停用旧页 Ticker/焦点/语义，再跳转 Sliver 视口，避免切换首帧
+    // 聊天礼物动画或列表内动画继续在 keep-alive bucket 中后台运行。
+    _activeIndexNotifier.value = nextIndex;
+    _syncPagePosition();
+    if (_reduceMotion || widget.duration == Duration.zero) {
+      _animationController.value = 1;
+    } else {
+      // forward(from: 0) 会立即中断前一次过渡，连续快速点击无需等待队列。
+      _animationController.forward(from: 0);
+    }
+  }
+
+  void _syncPagePosition() {
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(_currentIndex);
+      return;
+    }
+    if (_pageSyncScheduled) return;
+    _pageSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pageSyncScheduled = false;
+      if (!mounted || !_pageController.hasClients || widget.children.isEmpty) {
+        return;
+      }
+      _pageController.jumpToPage(_currentIndex);
+    });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _activeIndexNotifier.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.children.isEmpty) return const SizedBox.shrink();
+
+    final pageView = PageView.custom(
+      controller: _pageController,
+      physics: const NeverScrollableScrollPhysics(),
+      pageSnapping: false,
+      allowImplicitScrolling: false,
+      clipBehavior: Clip.hardEdge,
+      childrenDelegate: SliverChildBuilderDelegate(
+        (context, index) => ValueListenableBuilder<int>(
+          valueListenable: _activeIndexNotifier,
+          child: KeepAliveWrapper(
+            child: KeyedSubtree(
+              key: PageStorageKey<int>(index),
+              child: widget.children[index],
+            ),
+          ),
+          builder: (context, activeIndex, child) {
+            final active = activeIndex == index;
+            return TickerMode(
+              enabled: active,
+              child: IgnorePointer(
+                ignoring: !active,
+                child: ExcludeFocus(
+                  excluding: !active,
+                  child: ExcludeSemantics(
+                    excluding: !active,
+                    child: child!,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        childCount: widget.children.length,
+        addAutomaticKeepAlives: true,
+        addRepaintBoundaries: false,
+        addSemanticIndexes: false,
+      ),
+    );
+
+    return ClipRect(
+      child: AnimatedBuilder(
+        animation: _animationController,
+        child: pageView,
+        builder: (context, child) {
+          final progress = widget.curve.transform(_animationController.value);
+          final offset = _direction * _enterOffset * (1 - progress);
+          return Transform.translate(
+            offset: Offset(offset, 0),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LiveRoomMessageArea extends StatefulWidget {
+  const _LiveRoomMessageArea({
+    required this.controller,
+    required this.horizontalPadding,
+    required this.messageItemBuilder,
+    required this.superChatsBuilder,
+    required this.followListBuilder,
+    required this.settingsBuilder,
+    required this.bottomActionsBuilder,
+  });
+
+  final LiveRoomController controller;
+  final double horizontalPadding;
+  final Widget Function(BuildContext context, LiveMessage message)
+      messageItemBuilder;
+  final Widget Function() superChatsBuilder;
+  final Widget Function() followListBuilder;
+  final Widget Function() settingsBuilder;
+  final Widget Function() bottomActionsBuilder;
+
+  @override
+  State<_LiveRoomMessageArea> createState() => _LiveRoomMessageAreaState();
+}
+
+class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
+    with SingleTickerProviderStateMixin {
+  static const Duration _chatTabHideDelay = Duration(milliseconds: 2800);
+  static const Duration _bottomDockHideDelay = Duration(milliseconds: 2300);
+  static const Duration _tabSwitchDuration = Duration(milliseconds: 160);
+  static const double _tabBarHeight = 42;
+  static const double _tabContentInset = 50;
+
+  late final TabController _tabController;
+  late final List<Widget> _tabPages;
+  Timer? _hideTimer;
+  Timer? _bottomDockHideTimer;
+  int _activeIndex = 0;
+  bool _tabsVisible = true;
+  bool _bottomActionsVisible = true;
+  bool _disableAnimations = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 页面 Widget 只创建一次：首次访问时由 LiveRoomTabViewport 懒挂载，
+    // 后续切换保留 Element/滚动状态，避免设置列表等重型子树反复重建。
+    _tabPages = <Widget>[
+      Builder(builder: _buildChatTab),
+      Builder(builder: (_) => _withTabInset(widget.superChatsBuilder())),
+      Builder(builder: (_) => _withTabInset(widget.followListBuilder())),
+      Builder(builder: (_) => _withTabInset(widget.settingsBuilder())),
+    ];
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      animationDuration: _tabSwitchDuration,
+    )..addListener(_handleTabControllerChange);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scheduleAutoHide();
+      _scheduleBottomActionsAutoHide();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _disableAnimations = MediaQuery.disableAnimationsOf(context);
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    _bottomDockHideTimer?.cancel();
+    _tabController
+      ..removeListener(_handleTabControllerChange)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleTabControllerChange() {
+    final nextIndex = _tabController.index;
+    if (_activeIndex == nextIndex) return;
+    setState(() => _activeIndex = nextIndex);
+    _showTabs(scheduleAutoHide: nextIndex == 0);
+  }
+
+  void _scheduleAutoHide() {
+    _hideTimer?.cancel();
+    if (_activeIndex != 0) return;
+    _hideTimer = Timer(_chatTabHideDelay, _hideTabs);
+  }
+
+  void _showTabs({bool scheduleAutoHide = true}) {
+    _hideTimer?.cancel();
+    if (!_tabsVisible && mounted) {
+      setState(() => _tabsVisible = true);
+    }
+    if (scheduleAutoHide && _activeIndex == 0) {
+      _scheduleAutoHide();
+    }
+  }
+
+  void _hideTabs() {
+    _hideTimer?.cancel();
+    if (!mounted || _activeIndex != 0 || !_tabsVisible) return;
+    setState(() => _tabsVisible = false);
+  }
+
+  void _scheduleBottomActionsAutoHide() {
+    _bottomDockHideTimer?.cancel();
+    _bottomDockHideTimer = Timer(_bottomDockHideDelay, _hideBottomActions);
+  }
+
+  void _showBottomActions({bool scheduleAutoHide = true}) {
+    _bottomDockHideTimer?.cancel();
+    if (!_bottomActionsVisible && mounted) {
+      setState(() => _bottomActionsVisible = true);
+    }
+    if (scheduleAutoHide) {
+      _scheduleBottomActionsAutoHide();
+    }
+  }
+
+  void _hideBottomActions() {
+    _bottomDockHideTimer?.cancel();
+    if (!mounted || !_bottomActionsVisible) return;
+    setState(() => _bottomActionsVisible = false);
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (_activeIndex == 0) {
+      _showTabs();
+    }
+    _showBottomActions();
+  }
+
+  bool _handleChatScroll(UserScrollNotification notification) {
+    if (_activeIndex != 0) return false;
+    switch (notification.direction) {
+      case ScrollDirection.reverse:
+      case ScrollDirection.forward:
+        _hideTabs();
+        _hideBottomActions();
+        break;
+      case ScrollDirection.idle:
+        if (_tabsVisible) _scheduleAutoHide();
+        if (_bottomActionsVisible) _scheduleBottomActionsAutoHide();
+        break;
+    }
+    return false;
+  }
+
+  Duration get _visibilityDuration =>
+      _disableAnimations ? Duration.zero : SliveMotion.selection;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handlePointerDown,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          LiveRoomTabViewport(
+            index: _activeIndex,
+            duration: _tabSwitchDuration,
+            children: _tabPages,
+          ),
+          Positioned(
+            top: 4,
+            left: widget.horizontalPadding,
+            right: widget.horizontalPadding,
+            child: IgnorePointer(
+              ignoring: !_tabsVisible,
+              child: AnimatedSlide(
+                duration: _visibilityDuration,
+                curve: SliveMotion.standard,
+                offset: _tabsVisible ? Offset.zero : const Offset(0, -0.28),
+                child: AnimatedOpacity(
+                  duration: _visibilityDuration,
+                  curve: SliveMotion.standard,
+                  opacity: _tabsVisible ? 1 : 0,
+                  child: RepaintBoundary(child: _buildTabBar(context)),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              ignoring: !_bottomActionsVisible,
+              child: ExcludeSemantics(
+                excluding: !_bottomActionsVisible,
+                child: AnimatedSlide(
+                  duration: _visibilityDuration,
+                  curve: SliveMotion.standard,
+                  offset: _bottomActionsVisible
+                      ? Offset.zero
+                      : const Offset(0, 1.10),
+                  child: AnimatedOpacity(
+                    duration: _visibilityDuration,
+                    curve: SliveMotion.standard,
+                    opacity: _bottomActionsVisible ? 1 : 0,
+                    child: RepaintBoundary(
+                      child: widget.bottomActionsBuilder(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatTab(BuildContext context) {
+    return Obx(() {
+      final gap = AppSettingsController.instance.chatTextGap.value * 2;
+      return NotificationListener<UserScrollNotification>(
+        onNotification: _handleChatScroll,
+        child: Stack(
+          children: [
+            ListView.separated(
+              controller: widget.controller.scrollController,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              addAutomaticKeepAlives: false,
+              separatorBuilder: (_, i) => SizedBox(height: gap),
+              // Tab 栏是浮层：隐藏后不继续占用顶部空间，避免出现一条
+              // 无意义的空白带；同时不动画 padding，防止滚动位置抖动。
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              itemCount: widget.controller.messages.length,
+              itemBuilder: (_, i) {
+                final item = widget.controller.messages[i];
+                return widget.messageItemBuilder(context, item);
+              },
+            ),
+            HuyaGiftDanmakuOverlay(
+              controller: widget.controller,
+              placement: HuyaGiftOverlayPlacement.chat,
+            ),
+            if (widget.controller.disableAutoScroll.value)
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: SliveGlassSurface(
+                  variant: SliveGlassVariant.pill,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  onTap: widget.controller.resumeChatAutoScroll,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.arrow_downward_rounded, size: 16),
+                      SizedBox(width: 4),
+                      Text('最新'),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _withTabInset(Widget child) {
+    return Padding(
+      padding: const EdgeInsets.only(top: _tabContentInset),
+      child: child,
+    );
+  }
+
+  Widget _buildTabBar(BuildContext context) {
+    final colors = context.sliveColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      height: _tabBarHeight,
+      child: SliveGlassSurface(
+        variant: SliveGlassVariant.pill,
+        enableBackdropBlur: false,
+        showShadow: false,
+        shadowColor: Colors.transparent,
+        child: TabBar(
+          controller: _tabController,
+          onTap: (index) {
+            _showTabs(scheduleAutoHide: index == 0);
+          },
+          indicatorSize: TabBarIndicatorSize.tab,
+          indicatorAnimation: TabIndicatorAnimation.linear,
+          indicatorPadding: const EdgeInsets.all(2),
+          labelPadding: EdgeInsets.zero,
+          dividerColor: Colors.transparent,
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: WidgetStateProperty.all(Colors.transparent),
+          indicator: BoxDecoration(
+            color: colors.glassStrong.withValues(
+              alpha: isDark ? 0.16 : 0.82,
+            ),
+            borderRadius: BorderRadius.circular(SliveRadii.pill),
+            border: Border.all(
+              color: colors.glassBorder.withValues(
+                alpha: context.sliveMaterials.borderOpacity * 0.72,
+              ),
+            ),
+          ),
+          tabs: [
+            const Tab(text: '聊天'),
+            Tab(
+              child: Obx(
+                () => Text(
+                  widget.controller.superChats.isNotEmpty
+                      ? 'SC(${widget.controller.superChats.length})'
+                      : 'SC',
+                ),
+              ),
+            ),
+            const Tab(text: '关注'),
+            const Tab(text: '设置'),
+          ],
+        ),
+      ),
+    );
   }
 }

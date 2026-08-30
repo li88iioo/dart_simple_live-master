@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/modules/category/category_controller.dart';
 import 'package:simple_live_app/modules/category/category_list_view.dart';
+import 'package:simple_live_app/widgets/navigation/slive_animated_indexed_stack.dart';
 import 'package:simple_live_app/widgets/navigation/slive_platform_tab_bar.dart';
 
 class CategoryPage extends GetView<CategoryController> {
@@ -25,7 +26,7 @@ class CategoryPage extends GetView<CategoryController> {
               ),
             ),
             Expanded(
-              child: TabBarView(
+              child: SliveTabIndexedStack(
                 controller: controller.tabController,
                 children: sites
                     .map((site) => CategoryListView(site.id))

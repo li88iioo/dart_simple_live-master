@@ -392,6 +392,83 @@ void main() {
       expect(data['catalogNominalTotalYb'], isNull);
     });
 
+    test('透传 DIY 大礼物资源字段供 UI 安全选择图片', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final gift = _gift(payId: 'pay-effect-resource');
+      gift.diyEffect
+        ..resourceUrl = 'https://cdn.example.com/gift/common.webp'
+        ..resourceAttr = '{"format":"webp","width":480}'
+        ..webResourceUrl = 'https://cdn.example.com/gift/web.svga'
+        ..pcResourceUrl = 'https://cdn.example.com/gift/desktop.zip';
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(gift),
+          messageId: 206,
+        ),
+      );
+
+      expect(messages, hasLength(1));
+      final data = messages.single.data as Map;
+      expect(data['resourceUrl'], gift.diyEffect.resourceUrl);
+      expect(data['resourceAttr'], gift.diyEffect.resourceAttr);
+      expect(data['webResourceUrl'], gift.diyEffect.webResourceUrl);
+      expect(data['pcResourceUrl'], gift.diyEffect.pcResourceUrl);
+    });
+
+    test('礼物目录候选会规范化去重且图标不混入效果资源', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      danmaku.decodeMessage(
+        _wrapCatalogResponse(<HYPropsItem>[
+          HYPropsItem()
+            ..propsId = 4
+            ..propsName = '目录虎粮'
+            ..propsYb = 10
+            ..androidLogo = '//cdn.example.com/gift/android.png&legacy-sign'
+            ..iphoneLogo =
+                'https://cdn.example.com/gift/android.png?platform=iphone'
+            ..identities = <HYPropsIdentity>[
+              HYPropsIdentity()
+                ..propsPic108 =
+                    '//cdn.example.com/gift/catalog-108.webp?token=first'
+                ..propsPic24 =
+                    'https://cdn.example.com/gift/catalog-108.webp?token=second'
+                ..propsPicGif =
+                    'https://cdn.example.com/gift/catalog-icon.gif&legacy-sign'
+                ..propsChatBannerResource =
+                    '//cdn.example.com/gift/chat-effect.gif?token=first'
+                ..propsBannerResource =
+                    'https://cdn.example.com/gift/chat-effect.gif?token=second'
+                ..propH5Resource =
+                    'https://cdn.example.com/gift/real-effect.webp',
+            ],
+        ]),
+      );
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(_gift(payId: 'pay-catalog-visual')),
+          messageId: 207,
+        ),
+      );
+
+      expect(messages, hasLength(1));
+      final data = messages.single.data as Map;
+      expect(data['giftImageUrls'], <String>[
+        'https://cdn.example.com/gift/catalog-108.webp?token=first',
+        'https://cdn.example.com/gift/catalog-icon.gif',
+        'https://cdn.example.com/gift/android.png',
+      ]);
+      expect(data['giftEffectUrls'], <String>[
+        'https://cdn.example.com/gift/chat-effect.gif?token=first',
+        'https://cdn.example.com/gift/real-effect.webp',
+      ]);
+    });
+
     test('目录只为缺少名称的广播提供真实回退', () {
       final messages = <LiveMessage>[];
       final danmaku = _createDanmaku(messages);

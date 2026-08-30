@@ -141,14 +141,23 @@ class LocalStorageService extends GetxService {
   /// 抖音cookie
   static const String kDouyinCookie = "DouyinCookie";
 
-  ///主题色
+  /// 手动强调色（ARGB int），保持旧键兼容
   static const String kStyleColor = "kStyleColor";
 
-  ///动态取色
+  /// 强调色是否跟随系统动态取色，保持旧键兼容
   static const String kIsDynamic = "kIsDynamic";
 
   /// HyperOS 玻璃材质倾向：0 通透，1 柔和
   static const String kGlassMode = "kGlassMode";
+
+  /// 背景来源：dynamic / preset / custom
+  static const String kBackgroundSource = "BackgroundSource";
+
+  /// 内置背景稳定 ID：warmPorcelain / mistBlue / sageMilk
+  static const String kBackgroundPresetId = "BackgroundPresetId";
+
+  /// 自定义浅色背景（ARGB int）
+  static const String kCustomBackgroundColor = "CustomBackgroundColor";
 
   /// 自定义字体
   static const String kCustomFont = "CustomFont";

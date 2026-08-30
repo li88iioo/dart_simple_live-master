@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,6 +11,7 @@ import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:get/get_state_manager/src/simple/get_controllers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:simple_live_app/app/constant.dart';
+import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/models/font_model.dart';
@@ -21,22 +22,34 @@ class AppStyleSettingController extends GetxController {
   static AppStyleSettingController get instance =>
       Get.find<AppStyleSettingController>();
 
-  var themeMode = 0.obs;
+  /// 是否让系统动态色控制强调色。旧字段名保留以兼容 main.dart。
   var isDynamic = false.obs;
+
+  /// 手动强调色 ARGB。旧字段名保留以兼容 main.dart 和既有配置。
   var styleColor = 0xff3498db.obs;
   var glassMode = SliveGlassMode.soft.obs;
+  var backgroundSource = SliveBackgroundSource.preset.obs;
+  var backgroundPreset = SliveBackgroundPreset.warmPorcelain.obs;
+  var customBackgroundColor = SliveBackgroundStyle.colorToArgb(
+    SliveBackgroundStyle.defaultCustomColor,
+  ).obs;
   Rx<String?> curFontName = Rx<String?>(null);
   Rx<FontModel?> curFontModel = Rx<FontModel?>(null);
   final RxList<FontModel> fontList = <FontModel>[].obs;
   final RxMap<FontModel, String> fontMap = <FontModel, String>{}.obs;
   Rx<DownloadState> fontState = DownloadState.notDownloaded.obs;
 
-
   Future<void> init() async {
     loadAppearancePreferences();
     await fetchFonts();
     await userFontInit();
   }
+
+  SliveBackgroundStyle get backgroundStyle => SliveBackgroundStyle(
+        source: backgroundSource.value,
+        preset: backgroundPreset.value,
+        customColor: Color(customBackgroundColor.value),
+      );
 
   void loadAppearancePreferences() {
     styleColor.value = LocalStorageService.instance
@@ -48,35 +61,58 @@ class AppStyleSettingController extends GetxController {
       LocalStorageService.kGlassMode,
       SliveGlassMode.soft.index,
     );
-    glassMode.value = storedGlassMode >= 0 &&
-            storedGlassMode < SliveGlassMode.values.length
-        ? SliveGlassMode.values[storedGlassMode]
-        : SliveGlassMode.soft;
+    glassMode.value =
+        storedGlassMode >= 0 && storedGlassMode < SliveGlassMode.values.length
+            ? SliveGlassMode.values[storedGlassMode]
+            : SliveGlassMode.soft;
+
+    backgroundSource.value = SliveBackgroundSource.fromId(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kBackgroundSource,
+        SliveBackgroundSource.preset.id,
+      ),
+    );
+    backgroundPreset.value = SliveBackgroundPreset.fromId(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kBackgroundPresetId,
+        SliveBackgroundPreset.warmPorcelain.id,
+      ),
+    );
+    final storedCustomColor = LocalStorageService.instance.getValue(
+      LocalStorageService.kCustomBackgroundColor,
+      SliveBackgroundStyle.colorToArgb(
+        SliveBackgroundStyle.defaultCustomColor,
+      ),
+    );
+    customBackgroundColor.value = SliveBackgroundStyle.colorToArgb(
+      SliveBackgroundStyle.normalizeLightColor(Color(storedCustomColor)),
+    );
   }
 
-  Future<void> fontDelete() async{
+  Future<void> fontDelete() async {
     var dir = await getApplicationSupportDirectory();
     final fontDir = Directory("${dir.path}/fonts/${curFontModel.value!.id}");
     try {
       // 删除整个目录（包括目录本身和所有内容）
       await fontDir.delete(recursive: true);
       await fontDir.create(recursive: true);
-      var download =  await fontDownloadCheck(curFontModel.value!.id);
-      if(download == false){
+      var download = await fontDownloadCheck(curFontModel.value!.id);
+      if (download == false) {
         fontState.value = DownloadState.notDownloaded;
       }
       SmartDialog.showToast("已删除${curFontModel.value!.name}字体");
       Log.d('目录${fontDir.path}已清空并重新创建');
-    } catch (e,s) {
+    } catch (e, s) {
       Log.e('操作失败: $e', s);
     }
   }
 
-  void fontReset(){
-    if(Platform.isWindows){
+  void fontReset() {
+    if (Platform.isWindows) {
       curFontName.value = "Microsoft YaHei";
-      LocalStorageService.instance.setValue(LocalStorageService.kCustomFont, curFontName.value);
-    }else{
+      LocalStorageService.instance
+          .setValue(LocalStorageService.kCustomFont, curFontName.value);
+    } else {
       curFontName.value = null;
       LocalStorageService.instance.removeValue(LocalStorageService.kCustomFont);
     }
@@ -129,12 +165,15 @@ class AppStyleSettingController extends GetxController {
           } catch (e, s) {
             retryCount++;
             if (retryCount >= maxRetries) {
-              Log.e("Failed to download font file after $maxRetries attempts: $filePath\n$e", s);
+              Log.e(
+                  "Failed to download font file after $maxRetries attempts: $filePath\n$e",
+                  s);
               fontState.value = DownloadState.notDownloaded;
               SmartDialog.showToast("下载失败，请检查网络后重试");
               throw Exception("Failed to download $fileName: $e");
             }
-            Log.w("Download failed, retrying ($retryCount/$maxRetries): $fileName");
+            Log.w(
+                "Download failed, retrying ($retryCount/$maxRetries): $fileName");
             await Future.delayed(const Duration(seconds: 1));
           }
         }
@@ -226,13 +265,48 @@ class AppStyleSettingController extends GetxController {
     );
   }
 
+  Future<void> setBackgroundSource(SliveBackgroundSource source) async {
+    backgroundSource.value = source;
+    await LocalStorageService.instance.setValue(
+      LocalStorageService.kBackgroundSource,
+      source.id,
+    );
+  }
+
+  Future<void> setBackgroundPreset(SliveBackgroundPreset preset) async {
+    backgroundPreset.value = preset;
+    backgroundSource.value = SliveBackgroundSource.preset;
+    await LocalStorageService.instance.setValue(
+      LocalStorageService.kBackgroundPresetId,
+      preset.id,
+    );
+    await LocalStorageService.instance.setValue(
+      LocalStorageService.kBackgroundSource,
+      SliveBackgroundSource.preset.id,
+    );
+  }
+
+  Future<void> setCustomBackgroundColor(Color color) async {
+    final safeColor = SliveBackgroundStyle.normalizeLightColor(color);
+    customBackgroundColor.value = SliveBackgroundStyle.colorToArgb(safeColor);
+    backgroundSource.value = SliveBackgroundSource.custom;
+    await LocalStorageService.instance.setValue(
+      LocalStorageService.kCustomBackgroundColor,
+      customBackgroundColor.value,
+    );
+    await LocalStorageService.instance.setValue(
+      LocalStorageService.kBackgroundSource,
+      SliveBackgroundSource.custom.id,
+    );
+  }
+
   void changeTheme() {
     Get.dialog(
       SimpleDialog(
         title: const Text("设置主题"),
         children: [
           RadioGroup<int>(
-            groupValue: themeMode.value,
+            groupValue: AppSettingsController.instance.themeMode.value,
             onChanged: (e) {
               Get.back();
               setTheme(e ?? 0);
@@ -260,15 +334,22 @@ class AppStyleSettingController extends GetxController {
   }
 
   void setTheme(int i) {
-    themeMode.value = i;
-    var mode = ThemeMode.values[i];
+    final safeIndex = i >= 0 && i < ThemeMode.values.length ? i : 0;
+    AppSettingsController.instance.themeMode.value = safeIndex;
+    final mode = ThemeMode.values[safeIndex];
 
-    LocalStorageService.instance.setValue(LocalStorageService.kThemeMode, i);
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kThemeMode,
+      safeIndex,
+    );
     Get.changeThemeMode(mode);
   }
 
+  /// 兼容旧调用；语义明确为设置手动强调色。
   void setStyleColor(int e) {
     styleColor.value = e;
     LocalStorageService.instance.setValue(LocalStorageService.kStyleColor, e);
   }
+
+  void setAccentColor(int color) => setStyleColor(color);
 }

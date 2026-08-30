@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/sites.dart';
@@ -139,10 +137,18 @@ class _HeatBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blurEnabled = context.sliveMaterials.mode == SliveGlassMode.clear;
-    Widget badge = DecoratedBox(
+    // 列表滚动时每张卡片做 BackdropFilter 会反复采样封面纹理。
+    // 使用高遮罩渐变模拟毛玻璃，保留层次同时避免 GPU 合成热点。
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.42),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.black.withValues(alpha: 0.34),
+            Colors.black.withValues(alpha: 0.48),
+          ],
+        ),
         borderRadius: BorderRadius.circular(SliveRadii.pill),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.16),
@@ -168,17 +174,6 @@ class _HeatBadge extends StatelessWidget {
           ],
         ),
       ),
-    );
-
-    if (blurEnabled) {
-      badge = BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: badge,
-      );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(SliveRadii.pill),
-      child: badge,
     );
   }
 }

@@ -21,12 +21,18 @@ class AppStyle {
     String? fontFamily,
     ColorScheme? colorScheme,
     SliveGlassMode glassMode = SliveGlassMode.soft,
+    SliveBackgroundStyle backgroundStyle = const SliveBackgroundStyle(),
+    Color? dynamicBackgroundSurface,
+    SliveBackgroundPalette? backgroundPalette,
   }) {
     return _buildTheme(
       brightness: Brightness.light,
       sourceScheme: colorScheme ?? AppColors.lightColorScheme,
       fontFamily: fontFamily,
       glassMode: glassMode,
+      backgroundStyle: backgroundStyle,
+      dynamicBackgroundSurface: dynamicBackgroundSurface,
+      backgroundPalette: backgroundPalette,
     );
   }
 
@@ -34,12 +40,18 @@ class AppStyle {
     String? fontFamily,
     ColorScheme? colorScheme,
     SliveGlassMode glassMode = SliveGlassMode.soft,
+    SliveBackgroundStyle backgroundStyle = const SliveBackgroundStyle(),
+    Color? dynamicBackgroundSurface,
+    SliveBackgroundPalette? backgroundPalette,
   }) {
     return _buildTheme(
       brightness: Brightness.dark,
       sourceScheme: colorScheme ?? AppColors.darkColorScheme,
       fontFamily: fontFamily,
       glassMode: glassMode,
+      backgroundStyle: backgroundStyle,
+      dynamicBackgroundSurface: dynamicBackgroundSurface,
+      backgroundPalette: backgroundPalette,
     );
   }
 
@@ -48,11 +60,25 @@ class AppStyle {
     required ColorScheme sourceScheme,
     required String? fontFamily,
     required SliveGlassMode glassMode,
+    required SliveBackgroundStyle backgroundStyle,
+    required Color? dynamicBackgroundSurface,
+    required SliveBackgroundPalette? backgroundPalette,
   }) {
     final isDark = brightness == Brightness.dark;
+    final background = backgroundPalette ??
+        backgroundStyle.resolve(
+          brightness,
+          dynamicSurface: dynamicBackgroundSurface,
+        );
     final colors = isDark
-        ? SliveColorTokens.dark(sourceScheme.primary)
-        : SliveColorTokens.light(sourceScheme.primary);
+        ? SliveColorTokens.dark(
+            sourceScheme.primary,
+            background: background,
+          )
+        : SliveColorTokens.light(
+            sourceScheme.primary,
+            background: background,
+          );
     final materials = SliveMaterialTokens.resolve(glassMode, brightness);
     final scheme = sourceScheme.copyWith(
       brightness: brightness,
@@ -83,6 +109,30 @@ class AppStyle {
       outline: colors.textTertiary.withValues(alpha: isDark ? 0.50 : 0.58),
       outlineVariant: colors.divider.withValues(alpha: isDark ? 0.18 : 0.12),
       error: colors.danger,
+    );
+    final interactionOverlay = WidgetStateProperty.resolveWith<Color?>(
+      (states) {
+        if (states.contains(WidgetState.disabled)) {
+          return Colors.transparent;
+        }
+        if (states.contains(WidgetState.pressed)) {
+          return scheme.primary.withValues(alpha: isDark ? 0.10 : 0.072);
+        }
+        if (states.contains(WidgetState.focused)) {
+          return scheme.primary.withValues(alpha: isDark ? 0.075 : 0.048);
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return scheme.primary.withValues(alpha: isDark ? 0.055 : 0.034);
+        }
+        return Colors.transparent;
+      },
+    );
+    final flatInteractionStyle = ButtonStyle(
+      overlayColor: interactionOverlay,
+      splashFactory: NoSplash.splashFactory,
+      elevation: const WidgetStatePropertyAll<double>(0),
+      shadowColor: const WidgetStatePropertyAll(Colors.transparent),
+      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
     );
     final baseTextTheme =
         (isDark ? ThemeData.dark() : ThemeData.light()).textTheme.apply(
@@ -122,6 +172,15 @@ class AppStyle {
       colorScheme: scheme,
       brightness: brightness,
       useMaterial3: true,
+      splashFactory: NoSplash.splashFactory,
+      splashColor: Colors.transparent,
+      highlightColor: scheme.primary.withValues(
+        alpha: isDark ? 0.085 : 0.064,
+      ),
+      hoverColor: scheme.primary.withValues(alpha: isDark ? 0.055 : 0.034),
+      focusColor: scheme.primary.withValues(alpha: isDark ? 0.075 : 0.048),
+      shadowColor: Colors.transparent,
+      applyElevationOverlayColor: false,
       fontFamily: fontFamily,
       textTheme: textTheme,
       primaryTextTheme: textTheme,
@@ -132,9 +191,7 @@ class AppStyle {
       cardTheme: CardThemeData(
         color: colors.glassBase.withValues(alpha: materials.cardOpacity),
         surfaceTintColor: Colors.transparent,
-        shadowColor: const Color(0xFF8E7E6E).withValues(
-          alpha: materials.shadowOpacity,
-        ),
+        shadowColor: Colors.transparent,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
@@ -150,7 +207,7 @@ class AppStyle {
         backgroundColor: colors.glassStrong.withValues(alpha: 0.94),
         modalBackgroundColor: colors.glassStrong.withValues(alpha: 0.94),
         surfaceTintColor: Colors.transparent,
-        shadowColor: const Color(0xFF5A4D43).withValues(alpha: 0.18),
+        shadowColor: Colors.transparent,
         modalBarrierColor: Colors.black.withValues(alpha: isDark ? 0.42 : 0.20),
         elevation: 0,
         modalElevation: 0,
@@ -168,7 +225,7 @@ class AppStyle {
       dialogTheme: DialogThemeData(
         backgroundColor: colors.glassStrong.withValues(alpha: 0.94),
         surfaceTintColor: Colors.transparent,
-        shadowColor: const Color(0xFF5A4D43).withValues(alpha: 0.18),
+        shadowColor: Colors.transparent,
         elevation: 0,
         barrierColor: Colors.black.withValues(alpha: isDark ? 0.44 : 0.22),
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -192,7 +249,7 @@ class AppStyle {
         color: colors.glassStrong.withValues(alpha: 0.96),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shadowColor: const Color(0xFF5A4D43).withValues(alpha: 0.16),
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(SliveRadii.control),
           side: BorderSide(
@@ -230,10 +287,24 @@ class AppStyle {
         ),
       ),
       dividerColor: colors.divider.withValues(alpha: isDark ? 0.16 : 0.10),
-      splashColor: scheme.primary.withValues(alpha: 0.08),
-      highlightColor: scheme.primary.withValues(alpha: 0.04),
-      hoverColor: scheme.primary.withValues(alpha: 0.05),
-      focusColor: scheme.primary.withValues(alpha: 0.08),
+      iconButtonTheme: IconButtonThemeData(style: flatInteractionStyle),
+      textButtonTheme: TextButtonThemeData(style: flatInteractionStyle),
+      filledButtonTheme: FilledButtonThemeData(style: flatInteractionStyle),
+      elevatedButtonTheme: ElevatedButtonThemeData(style: flatInteractionStyle),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: flatInteractionStyle),
+      radioTheme: RadioThemeData(overlayColor: interactionOverlay),
+      checkboxTheme: CheckboxThemeData(overlayColor: interactionOverlay),
+      switchTheme: SwitchThemeData(overlayColor: interactionOverlay),
+      sliderTheme: SliderThemeData(
+        overlayColor: scheme.primary.withValues(alpha: isDark ? 0.10 : 0.075),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        overlayColor: interactionOverlay,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+      ),
       appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
@@ -259,6 +330,8 @@ class AppStyle {
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
         indicatorColor: scheme.primary,
+        overlayColor: interactionOverlay,
+        splashFactory: NoSplash.splashFactory,
         labelStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
         unselectedLabelStyle:
             textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),

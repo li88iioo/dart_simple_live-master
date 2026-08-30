@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'slive_background_style.dart';
+
 @immutable
 class SliveColorTokens extends ThemeExtension<SliveColorTokens> {
   const SliveColorTokens({
@@ -26,11 +28,16 @@ class SliveColorTokens extends ThemeExtension<SliveColorTokens> {
     required this.danger,
   });
 
-  factory SliveColorTokens.light(Color accent) {
+  factory SliveColorTokens.light(
+    Color accent, {
+    SliveBackgroundPalette? background,
+  }) {
+    final palette =
+        background ?? SliveBackgroundPreset.warmPorcelain.lightPalette;
     return SliveColorTokens(
-      backgroundStart: const Color(0xFFFAF7F2),
-      backgroundBase: const Color(0xFFF6F3ED),
-      backgroundEnd: const Color(0xFFF0EBE2),
+      backgroundStart: palette.start,
+      backgroundBase: palette.base,
+      backgroundEnd: palette.end,
       textPrimary: const Color(0xFF2B2623),
       textSecondary: const Color(0xFF7A716A),
       textTertiary: const Color(0xFFABA29A),
@@ -39,7 +46,7 @@ class SliveColorTokens extends ThemeExtension<SliveColorTokens> {
       ambientBlue: Color.lerp(const Color(0xFFC8DFFF), accent, 0.24)!,
       ambientAccent: accent,
       glassBase: Colors.white,
-      glassStrong: const Color(0xFFFFFDF9),
+      glassStrong: Color.lerp(Colors.white, palette.start, 0.16)!,
       glassBorder: Colors.white,
       divider: const Color(0xFF7A716A),
       bilibili: const Color(0xFFFB7299),
@@ -52,11 +59,16 @@ class SliveColorTokens extends ThemeExtension<SliveColorTokens> {
     );
   }
 
-  factory SliveColorTokens.dark(Color accent) {
+  factory SliveColorTokens.dark(
+    Color accent, {
+    SliveBackgroundPalette? background,
+  }) {
+    final palette =
+        background ?? const SliveBackgroundStyle().resolve(Brightness.dark);
     return SliveColorTokens(
-      backgroundStart: const Color(0xFF171513),
-      backgroundBase: const Color(0xFF1C1917),
-      backgroundEnd: const Color(0xFF241F1B),
+      backgroundStart: palette.start,
+      backgroundBase: palette.base,
+      backgroundEnd: palette.end,
       textPrimary: const Color(0xFFF8F1E9),
       textSecondary: const Color(0xFFC8BBB0),
       textTertiary: const Color(0xFF91877F),
@@ -64,8 +76,8 @@ class SliveColorTokens extends ThemeExtension<SliveColorTokens> {
       ambientOrange: const Color(0xFF8B5735),
       ambientBlue: Color.lerp(const Color(0xFF41536D), accent, 0.28)!,
       ambientAccent: accent,
-      glassBase: const Color(0xFF302B27),
-      glassStrong: const Color(0xFF39322D),
+      glassBase: Color.lerp(palette.base, Colors.white, 0.09)!,
+      glassStrong: Color.lerp(palette.end, Colors.white, 0.12)!,
       glassBorder: Colors.white,
       divider: const Color(0xFFC8BBB0),
       bilibili: const Color(0xFFFF86A7),

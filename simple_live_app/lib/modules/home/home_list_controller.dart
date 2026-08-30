@@ -5,6 +5,13 @@ import 'package:simple_live_core/simple_live_core.dart';
 class HomeListController extends BasePageController<LiveRoomItem> {
   final Site site;
   HomeListController(this.site);
+  bool _initialLoadRequested = false;
+
+  Future<void> ensureInitialLoad() async {
+    if (_initialLoadRequested || list.isNotEmpty || loadding) return;
+    _initialLoadRequested = true;
+    await refreshData();
+  }
 
   @override
   Future<List<LiveRoomItem>> getData(int page, int pageSize) async {

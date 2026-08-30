@@ -45,6 +45,10 @@ class FilterButton extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(SliveRadii.pill),
+            splashFactory: NoSplash.splashFactory,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            overlayColor: const WidgetStatePropertyAll(Colors.transparent),
             child: AnimatedContainer(
               duration: duration,
               curve: SliveMotion.standard,
@@ -56,18 +60,6 @@ class FilterButton extends StatelessWidget {
                 border: Border.all(
                   color: selected ? selectedBorder : Colors.transparent,
                 ),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF8E7E6E).withValues(
-                            alpha: isDark ? 0.10 : 0.075,
-                          ),
-                          blurRadius: 14,
-                          spreadRadius: -6,
-                          offset: const Offset(0, 5),
-                        ),
-                      ]
-                    : const [],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

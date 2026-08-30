@@ -88,7 +88,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   final HuyaGiftDanmakuQueue _huyaGiftQueue = HuyaGiftDanmakuQueue();
   Timer? _huyaGiftEffectTimer;
   Worker? _huyaGiftSettingWorker;
-  Worker? _danmakuVisibilityWorker;
+  Worker? _huyaGiftLiveStatusWorker;
   int _huyaGiftEffectSequence = 0;
 
   /// 清晰度数据
@@ -147,8 +147,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         if (!enabled) _clearHuyaGiftEffects();
       },
     );
-    _danmakuVisibilityWorker = ever<bool>(showDanmakuState, (visible) {
-      if (!visible) _clearHuyaGiftEffects();
+    _huyaGiftLiveStatusWorker = ever<bool>(liveStatus, (isLive) {
+      if (!isLive) _clearHuyaGiftEffects();
     });
     followed.value =
         FollowService.instance.getFollowExist("${site.id}_$roomId");
@@ -414,27 +414,31 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   }
 
   void _handleGiftMessage(LiveMessage message) {
-    final isHuyaGift = site.id == Constant.kHuya;
-    // 聊天区始终保留礼物事实消息；开关只控制虎牙播放器弹幕区域的礼物特效。
-    _addEventMessage(message);
-    if (!shouldShowHuyaGiftDanmakuEffect(
-      isHuya: isHuyaGift,
+    final action = resolveGiftMessageUiAction(
+      isHuya: site.id == Constant.kHuya,
       giftDanmakuEnabled:
           AppSettingsController.instance.huyaGiftDanmakuEnable.value,
       isLive: liveStatus.value,
       isBackground: isBackground,
-      showDanmaku: showDanmakuState.value,
-    )) {
-      return;
-    }
-
-    final event = HuyaGiftDanmakuEvent.fromMessage(
-      message,
-      sequence: ++_huyaGiftEffectSequence,
     );
-    final shouldPresentImmediately = _huyaGiftQueue.enqueue(event);
-    if (shouldPresentImmediately) {
-      _presentActiveHuyaGift();
+
+    switch (action) {
+      case GiftMessageUiAction.appendText:
+        // 非虎牙平台仍保留原有的文字礼物事件。
+        _addEventMessage(message);
+        return;
+      case GiftMessageUiAction.discard:
+        return;
+      case GiftMessageUiAction.showHuyaEffect:
+        final event = HuyaGiftDanmakuEvent.fromMessage(
+          message,
+          sequence: ++_huyaGiftEffectSequence,
+        );
+        final shouldPresentImmediately = _huyaGiftQueue.enqueue(event);
+        if (shouldPresentImmediately) {
+          _presentActiveHuyaGift();
+        }
+        return;
     }
   }
 
@@ -443,7 +447,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     activeHuyaGiftEffect.value = _huyaGiftQueue.active;
     if (_huyaGiftQueue.active == null) return;
 
-    _huyaGiftEffectTimer = Timer(const Duration(milliseconds: 2600), () {
+    _huyaGiftEffectTimer = Timer(const Duration(milliseconds: 3400), () {
       _huyaGiftQueue.advance();
       _presentActiveHuyaGift();
     });
@@ -1192,7 +1196,7 @@ ${error?.stackTrace}''');
     danmakuTimer?.cancel();
     _superChatTimer?.cancel();
     _huyaGiftSettingWorker?.dispose();
-    _danmakuVisibilityWorker?.dispose();
+    _huyaGiftLiveStatusWorker?.dispose();
     _clearHuyaGiftEffects();
     _chatMessageBuffer.clear();
     HistoryService.instance.stop();

@@ -17,6 +17,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/app/utils/listen_fourth_button.dart';
@@ -27,6 +28,7 @@ import 'package:simple_live_app/modules/settings/appstyle_settings/appstyle_sett
 import 'package:simple_live_app/routes/app_analytics_observer.dart';
 import 'package:simple_live_app/routes/app_pages.dart';
 import 'package:simple_live_app/routes/route_path.dart';
+import 'package:simple_live_app/routes/slive_route_transition.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/platform_service.dart';
@@ -155,6 +157,11 @@ class MyApp extends StatelessWidget {
         return Obx(() {
           final isDynamicColor = styleController.isDynamic.value;
           final styleColor = Color(styleController.styleColor.value);
+          final backgroundStyle = styleController.backgroundStyle;
+          // 背景动态取色始终基于系统的浅色中性色，再由主题层派生深色背景，
+          // 避免把高饱和强调色或暗色 surface 直接放大为整页底色。
+          final dynamicBackgroundSurface =
+              lightDynamic?.surfaceContainerLowest ?? lightDynamic?.surface;
           final lightColorScheme =
               lightDynamic != null && darkDynamic != null && isDynamicColor
                   ? lightDynamic
@@ -175,16 +182,23 @@ class MyApp extends StatelessWidget {
               fontFamily: styleController.curFontName.value,
               colorScheme: lightColorScheme,
               glassMode: styleController.glassMode.value,
+              backgroundStyle: backgroundStyle,
+              dynamicBackgroundSurface: dynamicBackgroundSurface,
             ),
             darkTheme: AppStyle.darkTheme(
               fontFamily: styleController.curFontName.value,
               colorScheme: darkColorScheme,
               glassMode: styleController.glassMode.value,
+              backgroundStyle: backgroundStyle,
+              dynamicBackgroundSurface: dynamicBackgroundSurface,
             ),
             themeMode: ThemeMode
                 .values[Get.find<AppSettingsController>().themeMode.value],
             initialRoute: RoutePath.kIndex,
             getPages: AppPages.routes,
+            customTransition: SliveRouteTransition(),
+            transitionDuration: SliveMotion.route,
+            popGesture: true,
             //国际化
             locale: const Locale("zh", "CN"),
             localizationsDelegates: const [

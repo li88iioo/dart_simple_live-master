@@ -48,7 +48,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
       children: [
         const _SectionLabel(
           title: '弹幕筛选',
-          description: '控制关键词、重复内容与虎牙真实礼物消息',
+          description: '控制关键词、重复内容与虎牙礼物视觉特效',
           first: true,
         ),
         SettingsCard(
@@ -73,7 +73,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
               Obx(
                 () => SettingsSwitch(
                   title: '虎牙礼物弹幕',
-                  subtitle: '在播放器弹幕区域显示真实礼物消息和轻量特效',
+                  subtitle: '非全屏显示在聊天区右上角，全屏显示在播放器；不受普通弹幕开关影响',
                   value: controller.huyaGiftDanmakuEnable.value,
                   onChanged: controller.setHuyaGiftDanmakuEnable,
                 ),
@@ -91,7 +91,8 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             children: [
               Obx(
                 () => SettingsSwitch(
-                  title: '默认开关',
+                  title: '普通弹幕默认开关',
+                  subtitle: '仅控制播放器内的普通滚动弹幕',
                   value: controller.danmuEnable.value,
                   onChanged: controller.setDanmuEnable,
                 ),
