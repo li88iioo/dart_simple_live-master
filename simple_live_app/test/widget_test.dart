@@ -1,30 +1,88 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:simple_live_app/main.dart';
+import 'package:simple_live_app/widgets/navigation/liquid_glass_bottom_bar.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  const destinations = [
+    LiquidGlassBottomBarDestination(
+      icon: Icons.home_outlined,
+      label: '首页',
+      value: 0,
+    ),
+    LiquidGlassBottomBarDestination(
+      icon: Icons.favorite_border,
+      label: '关注',
+      value: 1,
+    ),
+    LiquidGlassBottomBarDestination(
+      icon: Icons.grid_view_outlined,
+      label: '分类',
+      value: 2,
+    ),
+    LiquidGlassBottomBarDestination(
+      icon: Icons.person_outline,
+      label: '我的',
+      value: 3,
+    ),
+  ];
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  testWidgets('液态玻璃底栏展示全部入口并转发选择事件', (tester) async {
+    final selectedValue = ValueNotifier<int>(0);
+    addTearDown(selectedValue.dispose);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          extendBody: true,
+          body: const ColoredBox(color: Colors.blueGrey),
+          bottomNavigationBar: ValueListenableBuilder<int>(
+            valueListenable: selectedValue,
+            builder: (context, value, child) {
+              return LiquidGlassBottomBar(
+                destinations: destinations,
+                selectedValue: value,
+                onDestinationSelected: (nextValue) {
+                  selectedValue.value = nextValue;
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    for (final destination in destinations) {
+      expect(find.text(destination.label), findsOneWidget);
+    }
+
+    await tester.tap(find.text('关注'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(selectedValue.value, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('液态玻璃底栏在窄屏深色模式下不溢出', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(280, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          extendBody: true,
+          body: const ColoredBox(color: Colors.black),
+          bottomNavigationBar: LiquidGlassBottomBar(
+            destinations: destinations,
+            selectedValue: 0,
+            onDestinationSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(LiquidGlassBottomBar), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -1,7 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/widgets/navigation/liquid_glass_bottom_bar.dart';
 
 import 'indexed_controller.dart';
 
@@ -21,8 +21,8 @@ class IndexedPage extends GetView<IndexedController> {
                 child: Obx(
                   () => Container(
                     decoration: BoxDecoration(
-                      color: Get.theme.colorScheme.surface.withOpacity(
-                        Get.isDarkMode ? 0.65 : 0.85,
+                      color: Get.theme.colorScheme.surface.withValues(
+                        alpha: Get.isDarkMode ? 0.65 : 0.85,
                       ),
                       border: Border(
                         right: BorderSide(
@@ -44,7 +44,8 @@ class IndexedPage extends GetView<IndexedController> {
                         fontWeight: FontWeight.w600,
                       ),
                       unselectedLabelTextStyle: TextStyle(
-                        color: Get.theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: Get.theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5),
                         fontSize: 11,
                       ),
                       selectedIconTheme: IconThemeData(
@@ -52,7 +53,8 @@ class IndexedPage extends GetView<IndexedController> {
                         size: 24,
                       ),
                       unselectedIconTheme: IconThemeData(
-                        color: Get.theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: Get.theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5),
                         size: 22,
                       ),
                       destinations: controller.items
@@ -90,81 +92,25 @@ class IndexedPage extends GetView<IndexedController> {
               ),
             ],
           ),
-          bottomNavigationBar: Visibility(
-            visible: orientation == Orientation.portrait,
-            child: Obx(
-              () => ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Get.theme.colorScheme.surface.withOpacity(
-                        Get.isDarkMode ? 0.65 : 0.85,
-                      ),
-                      border: Border(
-                        top: BorderSide(
-                          color: Get.isDarkMode
-                              ? Colors.white.withAlpha(20)
-                              : Colors.black.withAlpha(15),
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                    child: SafeArea(
-                      top: false,
-                      child: SizedBox(
-                        height: 52,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: controller.items.map((item) {
-                            final isSelected =
-                                controller.index.value == item.index;
-                            return Expanded(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => controller.setIndex(item.index),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    AnimatedScale(
-                                      scale: isSelected ? 1.1 : 1.0,
-                                      duration: const Duration(milliseconds: 150),
-                                      child: Icon(
-                                        item.iconData,
-                                        color: isSelected
-                                            ? Get.theme.colorScheme.primary
-                                            : Get.theme.colorScheme.onSurface
-                                                .withOpacity(0.4),
-                                        size: 22,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      item.title,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                        color: isSelected
-                                            ? Get.theme.colorScheme.primary
-                                            : Get.theme.colorScheme.onSurface
-                                                .withOpacity(0.4),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
+          bottomNavigationBar: orientation == Orientation.portrait
+              ? Obx(
+                  () => LiquidGlassBottomBar(
+                    selectedValue: controller.index.value,
+                    onDestinationSelected: controller.setIndex,
+                    destinations: controller.items
+                        .asMap()
+                        .entries
+                        .map(
+                          (entry) => LiquidGlassBottomBarDestination(
+                            icon: entry.value.iconData,
+                            label: entry.value.title,
+                            value: entry.key,
+                          ),
+                        )
+                        .toList(growable: false),
                   ),
-                ),
-              ),
-            ),
-          ),
+                )
+              : null,
         );
       },
     );
