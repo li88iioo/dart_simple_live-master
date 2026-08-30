@@ -149,137 +149,150 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool isDynamicColor = AppStyleSettingController.instance.isDynamic.value;
-    Color styleColor =
-        Color(AppStyleSettingController.instance.styleColor.value);
+    final styleController = AppStyleSettingController.instance;
     return DynamicColorBuilder(
-        builder: ((ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-      ColorScheme? lightColorScheme;
-      ColorScheme? darkColorScheme;
-      if (lightDynamic != null && darkDynamic != null && isDynamicColor) {
-        lightColorScheme = lightDynamic;
-        darkColorScheme = darkDynamic;
-      } else {
-        lightColorScheme = ColorScheme.fromSeed(
-          seedColor: styleColor,
-          brightness: Brightness.light,
-        );
-        darkColorScheme = ColorScheme.fromSeed(
-            seedColor: styleColor, brightness: Brightness.dark);
-      }
-      return Obx(
-        () => GetMaterialApp(
-          title: "Slive",
-          theme: AppStyle.light(
-            fontFamily: AppStyleSettingController.instance.curFontName.value,
-          ).copyWith(colorScheme: lightColorScheme),
-          darkTheme: AppStyle.darkTheme(
-            fontFamily: AppStyleSettingController.instance.curFontName.value,
-          ).copyWith(colorScheme: darkColorScheme),
-          themeMode: ThemeMode
-              .values[Get.find<AppSettingsController>().themeMode.value],
-          initialRoute: RoutePath.kIndex,
-          getPages: AppPages.routes,
-          //国际化
-          locale: const Locale("zh", "CN"),
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: const [Locale("zh", "CN")],
-          logWriterCallback: (text, {bool? isError}) {
-            Log.addDebugLog(
-                text, (isError ?? false) ? Colors.red : Colors.grey);
-            Log.writeLog(text, (isError ?? false) ? Level.error : Level.info);
-          },
-          //debugShowCheckedModeBanner: false,
-          navigatorObservers: [
-            FlutterSmartDialog.observer,
-            if (Platform.isAndroid) AppAnalyticsObserver.observer
-          ],
-          builder: FlutterSmartDialog.init(
-            loadingBuilder: ((msg) => const AppLoaddingWidget()),
-            //字体大小不跟随系统变化
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context)
-                  .copyWith(textScaler: const TextScaler.linear(1.0)),
-              child: Stack(
-                children: [
-                  //侧键返回
-                  RawGestureDetector(
-                    excludeFromSemantics: true,
-                    gestures: <Type, GestureRecognizerFactory>{
-                      FourthButtonTapGestureRecognizer:
-                          GestureRecognizerFactoryWithHandlers<
-                              FourthButtonTapGestureRecognizer>(
-                        () => FourthButtonTapGestureRecognizer(),
-                        (FourthButtonTapGestureRecognizer instance) {
-                          instance.onTapDown = (TapDownDetails details) async {
-                            //如果处于全屏状态，退出全屏
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        return Obx(() {
+          final isDynamicColor = styleController.isDynamic.value;
+          final styleColor = Color(styleController.styleColor.value);
+          final lightColorScheme =
+              lightDynamic != null && darkDynamic != null && isDynamicColor
+                  ? lightDynamic
+                  : ColorScheme.fromSeed(
+                      seedColor: styleColor,
+                      brightness: Brightness.light,
+                    );
+          final darkColorScheme =
+              lightDynamic != null && darkDynamic != null && isDynamicColor
+                  ? darkDynamic
+                  : ColorScheme.fromSeed(
+                      seedColor: styleColor,
+                      brightness: Brightness.dark,
+                    );
+          return GetMaterialApp(
+            title: "Slive",
+            theme: AppStyle.light(
+              fontFamily: styleController.curFontName.value,
+              colorScheme: lightColorScheme,
+              glassMode: styleController.glassMode.value,
+            ),
+            darkTheme: AppStyle.darkTheme(
+              fontFamily: styleController.curFontName.value,
+              colorScheme: darkColorScheme,
+              glassMode: styleController.glassMode.value,
+            ),
+            themeMode: ThemeMode
+                .values[Get.find<AppSettingsController>().themeMode.value],
+            initialRoute: RoutePath.kIndex,
+            getPages: AppPages.routes,
+            //国际化
+            locale: const Locale("zh", "CN"),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale("zh", "CN")],
+            logWriterCallback: (text, {bool? isError}) {
+              Log.addDebugLog(
+                  text, (isError ?? false) ? Colors.red : Colors.grey);
+              Log.writeLog(text, (isError ?? false) ? Level.error : Level.info);
+            },
+            //debugShowCheckedModeBanner: false,
+            navigatorObservers: [
+              FlutterSmartDialog.observer,
+              if (Platform.isAndroid) AppAnalyticsObserver.observer
+            ],
+            builder: FlutterSmartDialog.init(
+              loadingBuilder: ((msg) => const AppLoaddingWidget()),
+              // 尊重系统字体设置，同时限制极端缩放，避免移动端控件跳位。
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(
+                    MediaQuery.textScalerOf(context)
+                        .scale(1)
+                        .clamp(0.9, 1.5)
+                        .toDouble(),
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    //侧键返回
+                    RawGestureDetector(
+                      excludeFromSemantics: true,
+                      gestures: <Type, GestureRecognizerFactory>{
+                        FourthButtonTapGestureRecognizer:
+                            GestureRecognizerFactoryWithHandlers<
+                                FourthButtonTapGestureRecognizer>(
+                          () => FourthButtonTapGestureRecognizer(),
+                          (FourthButtonTapGestureRecognizer instance) {
+                            instance.onTapDown =
+                                (TapDownDetails details) async {
+                              //如果处于全屏状态，退出全屏
+                              if (!Platform.isAndroid && !Platform.isIOS) {
+                                if (await windowManager.isFullScreen()) {
+                                  await windowManager.setFullScreen(false);
+                                  return;
+                                }
+                              }
+                              Get.back();
+                            };
+                          },
+                        ),
+                      },
+                      child: KeyboardListener(
+                        focusNode: FocusNode(),
+                        onKeyEvent: (KeyEvent event) async {
+                          if (event is KeyDownEvent &&
+                              event.logicalKey == LogicalKeyboardKey.escape) {
+                            // ESC退出全屏
+                            // 如果处于全屏状态，退出全屏
                             if (!Platform.isAndroid && !Platform.isIOS) {
                               if (await windowManager.isFullScreen()) {
                                 await windowManager.setFullScreen(false);
+                                EventBus.instance
+                                    .emit(EventBus.kEscapePressed, 0);
                                 return;
                               }
                             }
-                            Get.back();
-                          };
-                        },
-                      ),
-                    },
-                    child: KeyboardListener(
-                      focusNode: FocusNode(),
-                      onKeyEvent: (KeyEvent event) async {
-                        if (event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.escape) {
-                          // ESC退出全屏
-                          // 如果处于全屏状态，退出全屏
-                          if (!Platform.isAndroid && !Platform.isIOS) {
-                            if (await windowManager.isFullScreen()) {
-                              await windowManager.setFullScreen(false);
-                              EventBus.instance
-                                  .emit(EventBus.kEscapePressed, 0);
-                              return;
-                            }
                           }
-                        }
-                        // 空格键暂停/播放
-                        if (event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.space) {
-                          EventBus.instance.emit(EventBus.kSpacePressed, 0);
-                        }
-                      },
-                      child: child!,
+                          // 空格键暂停/播放
+                          if (event is KeyDownEvent &&
+                              event.logicalKey == LogicalKeyboardKey.space) {
+                            EventBus.instance.emit(EventBus.kSpacePressed, 0);
+                          }
+                        },
+                        child: child!,
+                      ),
                     ),
-                  ),
 
-                  //查看DEBUG日志按钮
-                  //只在Debug、Profile模式显示
-                  Visibility(
-                    visible: !kReleaseMode,
-                    child: Positioned(
-                      right: 12,
-                      bottom: 100 + context.mediaQueryViewPadding.bottom,
-                      child: Opacity(
-                        opacity: 0.4,
-                        child: ElevatedButton(
-                          child: const Text("DEBUG LOG"),
-                          onPressed: () {
-                            Get.bottomSheet(
-                              const DebugLogPage(),
-                            );
-                          },
+                    //查看DEBUG日志按钮
+                    //只在Debug、Profile模式显示
+                    Visibility(
+                      visible: !kReleaseMode,
+                      child: Positioned(
+                        right: 12,
+                        bottom: 100 + context.mediaQueryViewPadding.bottom,
+                        child: Opacity(
+                          opacity: 0.4,
+                          child: ElevatedButton(
+                            child: const Text("DEBUG LOG"),
+                            onPressed: () {
+                              Get.bottomSheet(
+                                const DebugLogPage(),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
-      );
-    }));
+          );
+        });
+      },
+    );
   }
 }

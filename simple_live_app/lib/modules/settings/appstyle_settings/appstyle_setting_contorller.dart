@@ -12,6 +12,7 @@ import 'package:get/get_state_manager/src/simple/get_controllers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/log.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/models/font_model.dart';
 import 'package:simple_live_app/requests/http_client.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
@@ -23,6 +24,7 @@ class AppStyleSettingController extends GetxController {
   var themeMode = 0.obs;
   var isDynamic = false.obs;
   var styleColor = 0xff3498db.obs;
+  var glassMode = SliveGlassMode.soft.obs;
   Rx<String?> curFontName = Rx<String?>(null);
   Rx<FontModel?> curFontModel = Rx<FontModel?>(null);
   final RxList<FontModel> fontList = <FontModel>[].obs;
@@ -31,13 +33,25 @@ class AppStyleSettingController extends GetxController {
 
 
   Future<void> init() async {
+    loadAppearancePreferences();
+    await fetchFonts();
+    await userFontInit();
+  }
+
+  void loadAppearancePreferences() {
     styleColor.value = LocalStorageService.instance
         .getValue(LocalStorageService.kStyleColor, 0xff3498db);
 
     isDynamic.value = LocalStorageService.instance
         .getValue(LocalStorageService.kIsDynamic, false);
-    await fetchFonts();
-    await userFontInit();
+    final storedGlassMode = LocalStorageService.instance.getValue(
+      LocalStorageService.kGlassMode,
+      SliveGlassMode.soft.index,
+    );
+    glassMode.value = storedGlassMode >= 0 &&
+            storedGlassMode < SliveGlassMode.values.length
+        ? SliveGlassMode.values[storedGlassMode]
+        : SliveGlassMode.soft;
   }
 
   Future<void> fontDelete() async{
@@ -202,6 +216,14 @@ class AppStyleSettingController extends GetxController {
   void setIsDynamic(bool e) {
     isDynamic.value = e;
     LocalStorageService.instance.setValue(LocalStorageService.kIsDynamic, e);
+  }
+
+  void setGlassMode(SliveGlassMode mode) {
+    glassMode.value = mode;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kGlassMode,
+      mode.index,
+    );
   }
 
   void changeTheme() {

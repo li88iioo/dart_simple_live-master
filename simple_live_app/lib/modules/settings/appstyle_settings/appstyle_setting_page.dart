@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/constant.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/modules/settings/appstyle_settings/appstyle_setting_contorller.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
 import 'package:simple_live_app/widgets/settings/settings_menu.dart';
@@ -24,14 +25,13 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
         AppStyle.hGap4,
         Visibility(
           visible: controller.fontState.value == DownloadState.downloaded,
-          child:
-        Tooltip(
-          message: "删除字体",
-          child: IconButton(
-            onPressed: controller.fontDelete,
-            icon: Icon(Icons.delete_outline_outlined),
+          child: Tooltip(
+            message: "删除字体",
+            child: IconButton(
+              onPressed: controller.fontDelete,
+              icon: Icon(Icons.delete_outline_outlined),
+            ),
           ),
-        ),
         ),
         Visibility(
           visible: controller.fontState.value == DownloadState.downloaded,
@@ -94,6 +94,31 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+          AppStyle.vGap12,
+          Padding(
+            padding: AppStyle.edgeInsetsA12,
+            child: Text(
+              "玻璃材质",
+              style: Get.textTheme.titleSmall,
+            ),
+          ),
+          SettingsCard(
+            child: Obx(
+              () => SettingsMenu<SliveGlassMode>(
+                title: "材质倾向",
+                subtitle: controller.glassMode.value.description,
+                value: controller.glassMode.value,
+                valueMap: const {
+                  SliveGlassMode.clear: "通透",
+                  SliveGlassMode.soft: "柔和",
+                },
+                onChanged: (mode) {
+                  controller.setGlassMode(mode);
+                  Get.forceAppUpdate();
+                },
               ),
             ),
           ),
@@ -216,7 +241,8 @@ class AppStyleSettingPage extends GetView<AppStyleSettingController> {
                         widget: Tooltip(
                           message: "应用字体",
                           child: IconButton(
-                            icon: const Icon(Icons.check_circle_outline_outlined),
+                            icon:
+                                const Icon(Icons.check_circle_outline_outlined),
                             onPressed: () => controller.changeFontFamily(),
                           ),
                         ),

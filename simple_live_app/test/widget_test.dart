@@ -85,4 +85,33 @@ void main() {
     expect(find.byType(LiquidGlassBottomBar), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('液态玻璃底栏支持 1.5 倍字体与减少动画设置', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            textScaler: TextScaler.linear(1.5),
+            disableAnimations: true,
+          ),
+          child: Scaffold(
+            extendBody: true,
+            body: const ColoredBox(color: Colors.blueGrey),
+            bottomNavigationBar: LiquidGlassBottomBar(
+              destinations: destinations,
+              selectedValue: 2,
+              onDestinationSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('分类'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

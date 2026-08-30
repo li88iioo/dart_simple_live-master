@@ -147,6 +147,9 @@ class LocalStorageService extends GetxService {
   ///动态取色
   static const String kIsDynamic = "kIsDynamic";
 
+  /// HyperOS 玻璃材质倾向：0 通透，1 柔和
+  static const String kGlassMode = "kGlassMode";
+
   /// 自定义字体
   static const String kCustomFont = "CustomFont";
 

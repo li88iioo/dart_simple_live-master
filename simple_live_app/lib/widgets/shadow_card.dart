@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
+import 'package:simple_live_app/widgets/glass/slive_glass_surface.dart';
 
 class ShadowCard extends StatelessWidget {
   final Widget child;
   final double radius;
   final Function()? onTap;
   final Function()? onLongPress;
+
   const ShadowCard({
     required this.child,
-    this.radius = 12.0,
+    this.radius = SliveRadii.card,
     this.onTap,
     this.onLongPress,
     super.key,
@@ -15,42 +18,11 @@ class ShadowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 0.5,
-        ),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                  spreadRadius: 0,
-                ),
-              ],
-      ),
-      child: Material(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(radius - 0.5),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(radius - 0.5),
-          onLongPress: onLongPress,
-          onTap: onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(radius - 0.5),
-            ),
-            child: child,
-          ),
-        ),
-      ),
+    return SliveGlassSurface(
+      radius: radius,
+      onTap: onTap == null ? null : () => onTap?.call(),
+      onLongPress: onLongPress == null ? null : () => onLongPress?.call(),
+      child: child,
     );
   }
 }

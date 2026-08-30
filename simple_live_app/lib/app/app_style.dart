@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 
 class AppColors {
   static ColorScheme lightColorScheme = ColorScheme.fromSeed(
-    // primarySwatch: Colors.blue,
     seedColor: const Color(0xff3498db),
     brightness: Brightness.light,
   );
@@ -17,63 +17,193 @@ class AppColors {
 }
 
 class AppStyle {
-  static ThemeData light({String? fontFamily}) {
-    return ThemeData(
-      colorScheme: AppColors.lightColorScheme,
-      useMaterial3: true,
+  static ThemeData light({
+    String? fontFamily,
+    ColorScheme? colorScheme,
+    SliveGlassMode glassMode = SliveGlassMode.soft,
+  }) {
+    return _buildTheme(
+      brightness: Brightness.light,
+      sourceScheme: colorScheme ?? AppColors.lightColorScheme,
       fontFamily: fontFamily,
-      visualDensity: VisualDensity.standard,
-      appBarTheme: AppBarTheme(
-        centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontFamily: fontFamily,
-          fontSize: 16,
-          color: AppColors.black333,
-        ),
-        foregroundColor: AppColors.black333,
-        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
-          systemNavigationBarColor: Colors.transparent,
-        ),
-      ),
-      tabBarTheme: TabBarThemeData(
-        labelColor: AppColors.lightColorScheme.primary,
-        unselectedLabelColor: Colors.grey.shade600,
-        indicatorSize: TabBarIndicatorSize.label,
-        dividerColor: Colors.transparent,
-        indicatorColor: AppColors.lightColorScheme.primary,
-      ),
+      glassMode: glassMode,
     );
   }
 
-  static ThemeData darkTheme({String? fontFamily}) {
-    return ThemeData.dark().copyWith(
-      colorScheme: AppColors.darkColorScheme,
+  static ThemeData darkTheme({
+    String? fontFamily,
+    ColorScheme? colorScheme,
+    SliveGlassMode glassMode = SliveGlassMode.soft,
+  }) {
+    return _buildTheme(
+      brightness: Brightness.dark,
+      sourceScheme: colorScheme ?? AppColors.darkColorScheme,
+      fontFamily: fontFamily,
+      glassMode: glassMode,
+    );
+  }
+
+  static ThemeData _buildTheme({
+    required Brightness brightness,
+    required ColorScheme sourceScheme,
+    required String? fontFamily,
+    required SliveGlassMode glassMode,
+  }) {
+    final isDark = brightness == Brightness.dark;
+    final colors = isDark
+        ? SliveColorTokens.dark(sourceScheme.primary)
+        : SliveColorTokens.light(sourceScheme.primary);
+    final materials = SliveMaterialTokens.resolve(glassMode, brightness);
+    final scheme = sourceScheme.copyWith(
+      brightness: brightness,
+      surface: colors.backgroundBase,
+      onSurface: colors.textPrimary,
+      onSurfaceVariant: colors.textSecondary,
+      surfaceContainerLowest: colors.backgroundStart,
+      surfaceContainerLow: Color.lerp(
+        colors.backgroundBase,
+        colors.glassBase,
+        isDark ? 0.08 : 0.36,
+      ),
+      surfaceContainer: Color.lerp(
+        colors.backgroundBase,
+        colors.glassBase,
+        isDark ? 0.12 : 0.52,
+      ),
+      surfaceContainerHigh: Color.lerp(
+        colors.backgroundBase,
+        colors.glassStrong,
+        isDark ? 0.18 : 0.66,
+      ),
+      surfaceContainerHighest: Color.lerp(
+        colors.backgroundBase,
+        colors.glassStrong,
+        isDark ? 0.24 : 0.78,
+      ),
+      outline: colors.textTertiary.withValues(alpha: isDark ? 0.50 : 0.58),
+      outlineVariant: colors.divider.withValues(alpha: isDark ? 0.18 : 0.12),
+      error: colors.danger,
+    );
+    final baseTextTheme =
+        (isDark ? ThemeData.dark() : ThemeData.light()).textTheme.apply(
+              fontFamily: fontFamily,
+              bodyColor: colors.textPrimary,
+              displayColor: colors.textPrimary,
+            );
+    final textTheme = baseTextTheme.copyWith(
+      headlineSmall: baseTextTheme.headlineSmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.35,
+      ),
+      titleLarge: baseTextTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.18,
+      ),
+      titleMedium: baseTextTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w700,
+      ),
+      titleSmall: baseTextTheme.titleSmall?.copyWith(
+        color: colors.textSecondary,
+        fontWeight: FontWeight.w700,
+      ),
+      bodyMedium: baseTextTheme.bodyMedium?.copyWith(
+        color: colors.textSecondary,
+      ),
+      bodySmall: baseTextTheme.bodySmall?.copyWith(
+        color: colors.textTertiary,
+      ),
+      labelSmall: baseTextTheme.labelSmall?.copyWith(
+        color: colors.textTertiary,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+
+    return ThemeData(
+      colorScheme: scheme,
+      brightness: brightness,
+      useMaterial3: true,
+      fontFamily: fontFamily,
+      textTheme: textTheme,
+      primaryTextTheme: textTheme,
       visualDensity: VisualDensity.standard,
-      textTheme: ThemeData.dark().textTheme.apply(
-            fontFamily: fontFamily,
-          ),
-      primaryTextTheme: ThemeData().textTheme.apply(
-            fontFamily: fontFamily,
-          ),
+      scaffoldBackgroundColor: colors.backgroundBase,
+      canvasColor: colors.backgroundBase,
+      cardColor: colors.glassBase.withValues(alpha: materials.cardOpacity),
+      dividerColor: colors.divider.withValues(alpha: isDark ? 0.16 : 0.10),
+      splashColor: scheme.primary.withValues(alpha: 0.08),
+      highlightColor: scheme.primary.withValues(alpha: 0.04),
+      hoverColor: scheme.primary.withValues(alpha: 0.05),
+      focusColor: scheme.primary.withValues(alpha: 0.08),
       appBarTheme: AppBarTheme(
         centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontFamily: fontFamily,
-          fontSize: 16,
-          color: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: textTheme.titleMedium?.copyWith(
+          color: colors.textPrimary,
+          fontSize: 17,
         ),
-        foregroundColor: Colors.white,
-        systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+        foregroundColor: colors.textPrimary,
+        systemOverlayStyle:
+            (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+                .copyWith(
+          statusBarColor: Colors.transparent,
           systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarDividerColor: Colors.transparent,
         ),
       ),
       tabBarTheme: TabBarThemeData(
-        labelColor: AppColors.darkColorScheme.primary,
-        unselectedLabelColor: Colors.grey.shade400,
+        labelColor: scheme.primary,
+        unselectedLabelColor: colors.textSecondary,
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
-        indicatorColor: AppColors.darkColorScheme.primary,
+        indicatorColor: scheme.primary,
+        labelStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        unselectedLabelStyle:
+            textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
       ),
+      dividerTheme: DividerThemeData(
+        color: colors.divider.withValues(alpha: isDark ? 0.16 : 0.10),
+        thickness: 0.5,
+        space: 0.5,
+        indent: 16,
+        endIndent: 16,
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: colors.textSecondary,
+        textColor: colors.textPrimary,
+        subtitleTextStyle: textTheme.bodySmall,
+        minVerticalPadding: 10,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colors.glassBase.withValues(
+          alpha: isDark ? 0.34 : 0.58,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(SliveRadii.control),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(SliveRadii.control),
+          borderSide: BorderSide(
+            color: colors.glassBorder.withValues(
+              alpha: materials.borderOpacity * (isDark ? 0.62 : 0.72),
+            ),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(SliveRadii.control),
+          borderSide: BorderSide(
+            color: scheme.primary.withValues(alpha: 0.58),
+          ),
+        ),
+      ),
+      extensions: <ThemeExtension<dynamic>>[
+        colors,
+        materials,
+      ],
     );
   }
 
