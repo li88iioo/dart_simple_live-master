@@ -85,7 +85,7 @@ class RemoteSyncWebDAVController extends BaseController {
         DateTime.fromMillisecondsSinceEpoch(
           LocalStorageService.instance.getValue(
             LocalStorageService.kWebDAVLastRecoverTime,
-            DateTime(2026, 1, 1).millisecondsSinceEpoch,
+            0,
           ),
         ),
       );
@@ -169,7 +169,6 @@ class RemoteSyncWebDAVController extends BaseController {
     }
   }
 
-
   // webDAV恢复到本地
   void doWebDAVRecovery() async {
     SmartDialog.showLoading(msg: "正在恢复到本地");
@@ -182,7 +181,7 @@ class RemoteSyncWebDAVController extends BaseController {
       LocalStorageService.instance.setValue(
           LocalStorageService.kWebDAVLastRecoverTime,
           syncTime.millisecondsSinceEpoch);
-    }catch(e,s){
+    } catch (e, s) {
       Log.e("恢复数据：$e", s);
       SmartDialog.dismiss();
       SmartDialog.showToast('同步失败');
@@ -203,14 +202,14 @@ class RemoteSyncWebDAVController extends BaseController {
       LocalStorageService.instance.setValue(
           LocalStorageService.kWebDAVLastUploadTime,
           syncTime.millisecondsSinceEpoch);
-    }catch(e,s){
+    } catch (e, s) {
       Log.e("双向同步数据：$e", s);
       SmartDialog.dismiss();
       SmartDialog.showToast('双向同步失败');
     }
   }
 
-  Future<void> _sync({required SyncMode mode}) async{
+  Future<void> _sync({required SyncMode mode}) async {
     SyncExecutor.instance.buildExecutorAttr(davClient);
     await SyncExecutor.instance.sync(mode);
     MigrationService.migrateDataByVersion();

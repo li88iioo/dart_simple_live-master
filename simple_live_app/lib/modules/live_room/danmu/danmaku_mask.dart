@@ -122,35 +122,6 @@ class DanmakuMask {
     _windowMs = baseWindowMs;
     _bucketSizeMs = _windowMs ~/ bucketCount;
   }
-
-  // 基于动态规划的 Levenshtein 距离 计算，用于文本相似度计算，暂时搁置
-  int _editDistance(String a, String b) {
-    final m = a.length;
-    final n = b.length;
-    List<List<int>> dp = List.generate(m + 1, (_) => List.filled(n + 1, 0));
-
-    for (int i = 0; i <= m; i++) {
-      dp[i][0] = i;
-    }
-    for (int j = 0; j <= n; j++) {
-      dp[0][j] = j;
-    }
-
-    for (int i = 1; i < m + 1; i++) {
-      for (int j = 1; j < n + 1; j++) {
-        if (a[i - 1] == b[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = 1 +
-              min(
-                dp[i - 1][j - 1],
-                min(dp[i][j - 1], dp[i - 1][j]),
-              );
-        }
-      }
-    }
-    return dp[m][n];
-  }
 }
 
 // Isolate

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import 'package:simple_live_app/app/app_style.dart';
 
 class ShadowCard extends StatelessWidget {
   final Widget child;
@@ -23,15 +21,15 @@ class ShadowCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.06),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
           width: 0.5,
         ),
         boxShadow: isDark
             ? []
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withValues(alpha: 0.03),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                   spreadRadius: 0,

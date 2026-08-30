@@ -107,7 +107,7 @@ class FollowSyncResource implements SyncResource<FollowBundle> {
     DateTime curLast = DateTime.fromMillisecondsSinceEpoch(
       LocalStorageService.instance.getValue(
         LocalStorageService.kWebDAVLastRecoverTime,
-        DateTime(2026, 1, 1).millisecondsSinceEpoch,
+        0,
       ),
     );
     var resFollows = _mergeFollowList(
@@ -124,7 +124,6 @@ class FollowSyncResource implements SyncResource<FollowBundle> {
       }
     }
     final resTags = <FollowUserTag>[];
-    ;
     String? lastKey;
     for (var entry in tagMap.entries) {
       lastKey = FractionalIndexing.generateKeyBetween(lastKey, null);

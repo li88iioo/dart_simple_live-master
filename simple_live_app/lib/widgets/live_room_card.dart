@@ -13,7 +13,8 @@ class LiveRoomCard extends StatelessWidget {
   final LiveRoomItem item;
   final Function()? onLongPress;
   final Function()? onFollowRemove;
-  const LiveRoomCard(this.site, this.item, {super.key, this.onLongPress, this.onFollowRemove});
+  const LiveRoomCard(this.site, this.item,
+      {super.key, this.onLongPress, this.onFollowRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +50,7 @@ class LiveRoomCard extends StatelessWidget {
                       horizontal: 6,
                       vertical: 3,
                     ),
-                    color: Colors.black.withOpacity(0.55),
+                    color: Colors.black.withValues(alpha: 0.55),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

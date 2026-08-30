@@ -18,8 +18,8 @@ class SearchPage extends GetView<AppSearchController> {
           height: 38,
           decoration: BoxDecoration(
             color: Get.isDarkMode
-                ? Colors.white.withOpacity(0.08)
-                : Colors.black.withOpacity(0.05),
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(19),
           ),
           child: Row(

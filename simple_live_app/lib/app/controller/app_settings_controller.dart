@@ -47,7 +47,8 @@ class AppSettingsController extends GetxController {
     danmuBottomMargin.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuBottomMargin, 0.0);
     danmuFontWeight.value = LocalStorageService.instance.getValue(
-        LocalStorageService.kDanmuFontWeight, FontWeight.normal.index);
+        LocalStorageService.kDanmuFontWeight,
+        FontWeight.values.indexOf(FontWeight.normal));
 
     hardwareDecode.value = LocalStorageService.instance
         .getValue(LocalStorageService.kHardwareDecode, true);
@@ -329,7 +330,7 @@ class AppSettingsController extends GetxController {
         .setValue(LocalStorageService.kDanmuStrokeWidth, e);
   }
 
-  var danmuFontWeight = FontWeight.normal.index.obs;
+  var danmuFontWeight = FontWeight.values.indexOf(FontWeight.normal).obs;
 
   void setDanmuFontWeight(int e) {
     danmuFontWeight.value = e;

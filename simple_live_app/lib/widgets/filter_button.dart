@@ -24,12 +24,14 @@ class FilterButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
           color: selected
-              ? primaryColor.withOpacity(0.12)
-              : (isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04)),
+              ? primaryColor.withValues(alpha: 0.12)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04)),
           borderRadius: AppStyle.radius24,
           border: Border.all(
             color: selected
-                ? primaryColor.withOpacity(0.15)
+                ? primaryColor.withValues(alpha: 0.15)
                 : Colors.transparent,
             width: 0.5,
           ),

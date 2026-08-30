@@ -1,30 +1,23 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:pinyin/pinyin.dart';
 
-void testPinyin(){
-  test("测试拼音", (){
-    var str = "zzz你好啊";
-    var res = PinyinHelper.getShortPinyin(str);
-    print(res);
+void main() {
+  test('生成中文拼音首字母', () {
+    expect(PinyinHelper.getShortPinyin('zzz你好啊'), 'zzz nha');
   });
-}
 
-void testDirectoryCheck(String path) {
-  test("测试文件夹路径检测", () {
-    final regex = RegExp(r'^/([^/]+)(/[^/]+)*$');
-    var res = regex.hasMatch(path);
-    print(res ? "yes" : "no");
-  });
-}
+  const cases = <String, bool>{
+    '/123/123': true,
+    '/123/123/123/123': true,
+    '123': false,
+    '/123': true,
+    '/123/': false,
+  };
 
-void main(){
-  var p1 = "/123/123";
-  var p2 = "/123/123/123/123";
-  var p3= "123";
-  var p4 = "/123";
-  var p5 = '/123/'; //no
-  var pathList = [p1,p2,p3,p4,p5];
-  for(var path in pathList){
-    testDirectoryCheck(path);
+  for (final entry in cases.entries) {
+    test('校验目录路径 ${entry.key}', () {
+      final regex = RegExp(r'^/([^/]+)(/[^/]+)*$');
+      expect(regex.hasMatch(entry.key), entry.value);
+    });
   }
 }
