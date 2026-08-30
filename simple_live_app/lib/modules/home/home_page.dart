@@ -1,59 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/modules/home/home_controller.dart';
 import 'package:simple_live_app/modules/home/home_list_view.dart';
+import 'package:simple_live_app/widgets/glass/slive_glass_icon_button.dart';
+import 'package:simple_live_app/widgets/navigation/slive_platform_tab_bar.dart';
 
 class HomePage extends GetView<HomeController> {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final sites = Sites.supportSites;
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 8,
-        title: TabBar(
-          controller: controller.tabController,
-          labelPadding: AppStyle.edgeInsetsH20,
-          isScrollable: true,
-          indicatorSize: TabBarIndicatorSize.label,
-          tabAlignment: TabAlignment.center,
-          tabs: Sites.supportSites
-              .map(
-                (e) => Tab(
-                  //text: e.name,
-
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        e.logo,
-                        width: 24,
-                      ),
-                      AppStyle.hGap8,
-                      Text(e.name),
-                    ],
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SlivePlatformTabBar(
+                      controller: controller.tabController,
+                      sites: sites,
+                    ),
                   ),
-                ),
-              )
-              .toList(),
-        ),
-        actions: [
-          IconButton(
-            onPressed: controller.toSearch,
-            icon: const Icon(Icons.search),
-          )
-        ],
-      ),
-      body: TabBarView(
-        controller: controller.tabController,
-        children: Sites.supportSites
-            .map(
-              (e) => HomeListView(
-                e.id,
+                  const SizedBox(width: 10),
+                  SliveGlassIconButton(
+                    icon: Icons.search_rounded,
+                    tooltip: '搜索直播',
+                    onPressed: controller.toSearch,
+                    enableBackdropBlur: true,
+                  ),
+                ],
               ),
-            )
-            .toList(),
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: controller.tabController,
+                children: sites
+                    .map((site) => HomeListView(site.id))
+                    .toList(growable: false),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

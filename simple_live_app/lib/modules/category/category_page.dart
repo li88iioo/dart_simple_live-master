@@ -1,53 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/modules/category/category_controller.dart';
 import 'package:simple_live_app/modules/category/category_list_view.dart';
+import 'package:simple_live_app/widgets/navigation/slive_platform_tab_bar.dart';
 
 class CategoryPage extends GetView<CategoryController> {
   const CategoryPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final sites = Sites.supportSites;
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 8,
-        title: TabBar(
-          controller: controller.tabController,
-          padding: EdgeInsets.zero,
-          tabAlignment: TabAlignment.center,
-          tabs: Sites.supportSites
-              .map(
-                (e) => Tab(
-                  //text: e.name,
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        e.logo,
-                        width: 24,
-                      ),
-                      AppStyle.hGap8,
-                      Text(e.name),
-                    ],
-                  ),
-                ),
-              )
-              .toList(),
-          labelPadding: AppStyle.edgeInsetsH20,
-          isScrollable: true,
-          indicatorSize: TabBarIndicatorSize.label,
-        ),
-      ),
-      body: TabBarView(
-        controller: controller.tabController,
-        children: Sites.supportSites
-            .map(
-              (e) => CategoryListView(
-                e.id,
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: SlivePlatformTabBar(
+                controller: controller.tabController,
+                sites: sites,
               ),
-            )
-            .toList(),
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: controller.tabController,
+                children: sites
+                    .map((site) => CategoryListView(site.id))
+                    .toList(growable: false),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

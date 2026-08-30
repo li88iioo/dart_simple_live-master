@@ -4,28 +4,45 @@ import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
 class CategoryListController extends BasePageController<AppLiveCategory> {
-  final Site site;
   CategoryListController(this.site);
+
+  final Site site;
 
   @override
   Future<List<AppLiveCategory>> getData(int page, int pageSize) async {
-    var result = await site.liveSite.getCategores();
-
-    return result.map((e) => AppLiveCategory.fromLiveCategory(e)).toList();
+    final result = await site.liveSite.getCategores();
+    return result.map(AppLiveCategory.fromLiveCategory).toList(growable: false);
   }
 }
 
 class AppLiveCategory extends LiveCategory {
-  var showAll = false.obs;
   AppLiveCategory({
     required super.id,
     required super.name,
     required super.children,
   }) {
-    showAll.value = children.length < 19;
+    showAll.value = children.length <= previewCount;
   }
 
-  List<LiveSubCategory> get take15 => children.take(15).toList();
+  static const int previewCount = 15;
+
+  final RxBool showAll = false.obs;
+
+  bool get canExpand => children.length > previewCount;
+
+  int get remainingCount => canExpand ? children.length - previewCount : 0;
+
+  List<LiveSubCategory> get visibleChildren {
+    if (showAll.value || !canExpand) {
+      return children;
+    }
+    return children.take(previewCount).toList(growable: false);
+  }
+
+  void toggleExpanded() {
+    if (!canExpand) return;
+    showAll.toggle();
+  }
 
   factory AppLiveCategory.fromLiveCategory(LiveCategory item) {
     return AppLiveCategory(

@@ -1,131 +1,184 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:remixicon/remixicon.dart';
-import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/sites.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
+import 'package:simple_live_app/widgets/glass/slive_glass_surface.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
-import 'package:simple_live_app/widgets/shadow_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
 class LiveRoomCard extends StatelessWidget {
+  const LiveRoomCard(
+    this.site,
+    this.item, {
+    super.key,
+    this.onLongPress,
+    this.onFollowRemove,
+  });
+
   final Site site;
   final LiveRoomItem item;
   final Function()? onLongPress;
   final Function()? onFollowRemove;
-  const LiveRoomCard(this.site, this.item,
-      {super.key, this.onLongPress, this.onFollowRemove});
 
   @override
   Widget build(BuildContext context) {
-    return ShadowCard(
+    final colors = context.sliveColors;
+    return SliveGlassSurface(
+      variant: SliveGlassVariant.card,
+      radius: SliveRadii.card,
       onTap: () {
         AppNavigator.toLiveRoomDetail(site: site, roomId: item.roomId);
       },
-      onLongPress: onLongPress,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                ),
-                child: NetImage(
-                  item.cover,
-                  fit: BoxFit.cover,
-                  height: 110,
-                  width: double.infinity,
-                ),
-              ),
-              Positioned(
-                right: 6,
-                bottom: 6,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
+      onLongPress: onLongPress == null ? null : () => onLongPress?.call(),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(5, 5, 5, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 3 / 2,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(SliveRadii.cover),
+                    child: NetImage(
+                      item.cover,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
-                    color: Colors.black.withValues(alpha: 0.55),
-                    child: Row(
+                  ),
+                  Positioned(
+                    right: 7,
+                    bottom: 7,
+                    child: _HeatBadge(
+                      icon: site.iconData,
+                      text: Utils.onlineToString(item.online),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(7, 9, 5, 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          site.iconData,
-                          color: Colors.white,
-                          size: 11,
-                        ),
-                        AppStyle.hGap4,
                         Text(
-                          Utils.onlineToString(item.online),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
+                          item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontSize: 13.5,
+                            height: 1.2,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.08,
                           ),
-                        )
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.userName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            height: 1.25,
+                            fontSize: 11.5,
+                            color: colors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
+                  if (onFollowRemove != null) ...[
+                    const SizedBox(width: 4),
+                    SizedBox.square(
+                      dimension: 36,
+                      child: IconButton(
+                        tooltip: '取消关注',
+                        onPressed: () => onFollowRemove?.call(),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          Remix.dislike_line,
+                          size: 18,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ),
-          Padding(
-            padding: AppStyle.edgeInsetsH8.copyWith(
-              top: 8,
-              bottom: 8,
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        item.userName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          height: 1.3,
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (onFollowRemove != null) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    onPressed: onFollowRemove,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    icon: const Icon(Remix.dislike_line),
-                  )
-                ]
-              ],
-            ),
-          )
-        ],
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _HeatBadge extends StatelessWidget {
+  const _HeatBadge({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final blurEnabled = context.sliveMaterials.mode == SliveGlassMode.clear;
+    Widget badge = DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(SliveRadii.pill),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.16),
+          width: 0.7,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 11),
+            const SizedBox(width: 4),
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 10.5,
+                height: 1,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (blurEnabled) {
+      badge = BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: badge,
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(SliveRadii.pill),
+      child: badge,
     );
   }
 }
