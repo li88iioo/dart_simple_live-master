@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
@@ -55,11 +56,30 @@ class LocalSyncPage extends GetView<LocalSyncController> {
                     ),
                   ),
                   AppStyle.vGap12,
-                  ElevatedButton(
-                    onPressed: () {
-                      controller.connect();
-                    },
-                    child: const Text("连接"),
+                  TextField(
+                    controller: controller.pairingCodeController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    maxLength: 8,
+                    decoration: const InputDecoration(
+                      labelText: '配对码',
+                      hintText: '输入对方设备显示的 8 位配对码',
+                      counterText: '',
+                      contentPadding: AppStyle.edgeInsetsH12,
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => controller.connect(),
+                  ),
+                  AppStyle.vGap12,
+                  Obx(
+                    () => ElevatedButton(
+                      onPressed: SyncService.instance.starting.value
+                          ? null
+                          : () => controller.connect(),
+                      child: Text(
+                        SyncService.instance.starting.value ? '正在启动服务…' : '连接',
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -77,9 +97,7 @@ class LocalSyncPage extends GetView<LocalSyncController> {
             contentPadding: AppStyle.edgeInsetsH12,
             trailing: IconButton(
               visualDensity: VisualDensity.compact,
-              onPressed: () {
-                SyncService.instance.refreshClients();
-              },
+              onPressed: controller.refreshClients,
               icon: const Icon(Icons.refresh),
             ),
           ),

@@ -4,9 +4,11 @@ import 'package:simple_live_app/services/sync_service.dart';
 
 class SyncClientRequest {
   Future<SyncClientInfoModel> getClientInfo(SyncClinet client) async {
-    var url = "http://${client.address}:${client.port}/info";
-    var data = await HttpClient.instance.getJson(url);
-
+    final url = 'http://${client.address}:${client.port}/info';
+    final data = await HttpClient.instance.getJson(
+      url,
+      header: _authHeaders(client),
+    );
     return SyncClientInfoModel.fromJson(data);
   }
 
@@ -14,99 +16,79 @@ class SyncClientRequest {
     SyncClinet client,
     dynamic body, {
     bool overlay = false,
-  }) async {
-    var url = "http://${client.address}:${client.port}/sync/follow";
-    var data = await HttpClient.instance.postJson(
-      url,
-      data: body,
-      queryParameters: {
-        'overlay': overlay ? '1' : '0',
-      },
+  }) {
+    return _syncList(
+      client,
+      path: '/sync/follow',
+      body: body,
+      overlay: overlay,
     );
-
-    if (data["status"]) {
-      return true;
-    } else {
-      throw data["message"];
-    }
   }
 
   Future<bool> syncTag(
     SyncClinet client,
     dynamic body, {
     bool overlay = false,
-  }) async {
-    var url = "http://${client.address}:${client.port}/sync/tag";
-    var data = await HttpClient.instance.postJson(
-      url,
-      data: body,
-      queryParameters: {
-        'overlay': overlay ? '1' : '0',
-      },
+  }) {
+    return _syncList(
+      client,
+      path: '/sync/tag',
+      body: body,
+      overlay: overlay,
     );
-
-    if (data["status"]) {
-      return true;
-    } else {
-      throw data["message"];
-    }
   }
 
   Future<bool> syncHistory(
     SyncClinet client,
     dynamic body, {
     bool overlay = false,
-  }) async {
-    var url = "http://${client.address}:${client.port}/sync/history";
-    var data = await HttpClient.instance.postJson(
-      url,
-      data: body,
-      queryParameters: {
-        'overlay': overlay ? '1' : '0',
-      },
+  }) {
+    return _syncList(
+      client,
+      path: '/sync/history',
+      body: body,
+      overlay: overlay,
     );
-
-    if (data["status"]) {
-      return true;
-    } else {
-      throw data["message"];
-    }
   }
 
   Future<bool> syncBlockedWord(
     SyncClinet client,
     dynamic body, {
     bool overlay = false,
+  }) {
+    return _syncList(
+      client,
+      path: '/sync/blocked_word',
+      body: body,
+      overlay: overlay,
+    );
+  }
+
+  Future<bool> _syncList(
+    SyncClinet client, {
+    required String path,
+    required dynamic body,
+    required bool overlay,
   }) async {
-    var url = "http://${client.address}:${client.port}/sync/blocked_word";
-    var data = await HttpClient.instance.postJson(
+    final url = 'http://${client.address}:${client.port}$path';
+    final data = await HttpClient.instance.postJson(
       url,
       data: body,
       queryParameters: {
         'overlay': overlay ? '1' : '0',
       },
+      header: _authHeaders(client),
     );
 
-    if (data["status"]) {
+    if (data['status'] == true) {
       return true;
-    } else {
-      throw data["message"];
     }
+    throw data['message'] ?? '同步失败';
   }
 
-  Future<bool> syncBiliAccount(SyncClinet client, String cookie) async {
-    var url = "http://${client.address}:${client.port}/sync/account/bilibili";
-    var data = await HttpClient.instance.postJson(
-      url,
-      data: {
-        "cookie": cookie,
-      },
-    );
-
-    if (data["status"]) {
-      return true;
-    } else {
-      throw data["message"];
-    }
+  Map<String, dynamic> _authHeaders(SyncClinet client) {
+    return {
+      SyncService.pairingCodeHeader: client.pairingCode,
+    };
   }
 }

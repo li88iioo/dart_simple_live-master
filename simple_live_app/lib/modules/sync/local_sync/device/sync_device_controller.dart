@@ -7,7 +7,6 @@ import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/sync_client_info_model.dart';
 import 'package:simple_live_app/requests/sync_client_request.dart';
-import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 
@@ -71,25 +70,6 @@ class SyncDeviceController extends BaseController {
       var data = json.encode(shieldList.toList());
       await request.syncBlockedWord(client, data, overlay: overlay);
       SmartDialog.showToast("已同步屏蔽词");
-    } catch (e) {
-      SmartDialog.showToast("同步失败:$e");
-      Log.logPrint(e);
-    } finally {
-      SmartDialog.dismiss();
-    }
-  }
-
-  void syncBiliAccount() async {
-    try {
-      if (!BiliBiliAccountService.instance.logined.value) {
-        SmartDialog.showToast("未登录哔哩哔哩");
-        return;
-      }
-      SmartDialog.showLoading(msg: "同步中...");
-
-      await request.syncBiliAccount(
-          client, BiliBiliAccountService.instance.cookie);
-      SmartDialog.showToast("已同步哔哩哔哩账号");
     } catch (e) {
       SmartDialog.showToast("同步失败:$e");
       Log.logPrint(e);

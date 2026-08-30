@@ -63,7 +63,7 @@ class RoutePath {
   /// 数据同步
   static const kLocalSync = "/local_sync";
 
-  /// 数据同步
+  /// 兼容旧版的数据同步入口（当前仅提供局域网同步）
   static const kSync = "/sync";
 
   /// 扫描

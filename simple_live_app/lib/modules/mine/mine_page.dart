@@ -160,13 +160,13 @@ class MinePage extends StatelessWidget {
                 ),
                 ListTile(
                   leading: _buildLeadingIcon(context, Icons.devices, Colors.teal),
-                  title: const Text("数据同步", style: TextStyle(fontSize: 14)),
+                  title: const Text("局域网同步", style: TextStyle(fontSize: 14)),
                   trailing: const Icon(
                     Icons.chevron_right,
                     color: Colors.grey,
                   ),
                   onTap: () {
-                    Get.toNamed(RoutePath.kSync);
+                    Get.toNamed(RoutePath.kLocalSync);
                   },
                 ),
                 ListTile(

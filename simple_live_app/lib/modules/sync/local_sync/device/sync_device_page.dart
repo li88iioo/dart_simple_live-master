@@ -55,15 +55,6 @@ class SyncDevicePage extends GetView<SyncDeviceController> {
                     controller.syncBlockedWord();
                   },
                 ),
-                AppStyle.divider,
-                ListTile(
-                  leading: const Icon(Remix.account_circle_line),
-                  title: const Text("同步哔哩哔哩账号"),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    controller.syncBiliAccount();
-                  },
-                ),
               ],
             ),
           ),

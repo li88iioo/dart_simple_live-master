@@ -23,8 +23,8 @@ Request Method：${err.requestOptions.method}
 Response Code：${err.response?.statusCode}
 Request URL：${err.requestOptions.uri}
 Request Query：${err.requestOptions.queryParameters}
-Request Data：${err.requestOptions.data}
-Request Headers：${err.requestOptions.headers}
+Request Data：${_safeRequestData(err.requestOptions)}
+Request Headers：${_maskHeader(err.requestOptions.headers)}
 Response Headers：${err.response?.headers.map}
 Response Data：${err.response?.data}''', err.stackTrace);
     } else {
@@ -55,8 +55,8 @@ Request Method：${response.requestOptions.method}
 Request Code：${response.statusCode}
 Request URL：${response.requestOptions.uri}
 Request Query：${response.requestOptions.queryParameters}
-Request Data：${response.requestOptions.data}
-Request Headers：${response.requestOptions.headers}
+Request Data：${_safeRequestData(response.requestOptions)}
+Request Headers：${_maskHeader(response.requestOptions.headers)}
 Response Headers：${response.headers.map}
 Response Data：${response.data}''',
       );
@@ -68,12 +68,21 @@ Response Data：${response.data}''',
     super.onResponse(response, handler);
   }
 
+  Object? _safeRequestData(RequestOptions options) {
+    final hasPairingCode = options.headers.keys.any(
+      (key) => key.toLowerCase() == 'x-simple-live-pairing-code',
+    );
+    return hasPairingCode ? '[local sync payload omitted]' : options.data;
+  }
+
   // Header脱敏
   String _maskHeader(Map<String, dynamic> header) {
     var result = <String, dynamic>{};
     header.forEach((key, value) {
       var k = key.toLowerCase();
-      if (k == "cookie" || k == "authorization") {
+      if (k == "cookie" ||
+          k == "authorization" ||
+          k == "x-simple-live-pairing-code") {
         result[key] = "******";
       } else {
         result[key] = value;
