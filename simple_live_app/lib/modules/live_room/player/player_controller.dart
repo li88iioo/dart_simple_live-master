@@ -5,6 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:floating/floating.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
@@ -21,6 +22,7 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/custom_throttle.dart';
 import 'package:simple_live_app/app/log.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
@@ -260,6 +262,9 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   final VolumeController volumeController = VolumeController.instance;
   final pip = Floating();
   StreamSubscription<PiPStatus>? _pipSubscription;
+  bool _systemUiChanged = false;
+  bool _orientationChanged = false;
+  bool _brightnessChanged = false;
 
   /// 初始化一些系统状态
   void initSystem() async {
@@ -277,20 +282,27 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   /// 释放一些系统状态
   Future resetSystem() async {
     _pipSubscription?.cancel();
-    //pip.dispose();
-    await SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.edgeToEdge,
-      overlays: SystemUiOverlay.values,
-    );
-
-    await setPortraitOrientation();
-    if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
-      // 亮度重置,桌面平台可能会报错,暂时不处理桌面平台的亮度
+    // 普通竖屏观看不会改系统 UI、方向或亮度，退出时不要无条件触发
+    // WindowInsets/配置更新，避免返回动画结束后又发生一次整窗布局。
+    if (_systemUiChanged) {
+      await SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.edgeToEdge,
+        overlays: SystemUiOverlay.values,
+      );
+      _systemUiChanged = false;
+    }
+    if (_orientationChanged) {
+      await setPortraitOrientation();
+      _orientationChanged = false;
+    }
+    if (_brightnessChanged &&
+        (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
       try {
         await screenBrightness.resetApplicationScreenBrightness();
       } catch (e) {
         Log.logPrint(e);
       }
+      _brightnessChanged = false;
     }
 
     await WakelockPlus.disable();
@@ -301,9 +313,11 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     fullScreenState.value = true;
     if (Platform.isAndroid || Platform.isIOS) {
       //全屏
+      _systemUiChanged = true;
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       if (!isVertical.value) {
         //横屏
+        _orientationChanged = true;
         setLandscapeOrientation();
       }
     } else {
@@ -321,9 +335,13 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   /// 退出全屏
   void exitFull() async {
     if (Platform.isAndroid || Platform.isIOS) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge,
-          overlays: SystemUiOverlay.values);
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.edgeToEdge,
+        overlays: SystemUiOverlay.values,
+      );
+      _systemUiChanged = false;
       setPortraitOrientation();
+      _orientationChanged = false;
     } else {
       bool isMaximized = await windowManager.isMaximized();
       if (isMaximized) {
@@ -663,6 +681,7 @@ mixin PlayerGestureControlMixin
       if (seek < 0) {
         seek = 0;
       }
+      _brightnessChanged = true;
       screenBrightness.setApplicationScreenBrightness(seek);
 
       gestureTipText.value = "亮度 ${(seek * 100).toInt()}%";
@@ -674,6 +693,7 @@ mixin PlayerGestureControlMixin
         seek = 1;
       }
 
+      _brightnessChanged = true;
       screenBrightness.setApplicationScreenBrightness(seek);
       gestureTipText.value = "亮度 ${(seek * 100).toInt()}%";
       Log.logPrint(value);
@@ -699,13 +719,69 @@ class PlayerController extends BaseController
         PlayerDanmakuMixin,
         PlayerSystemMixin,
         PlayerGestureControlMixin {
+  /// 路由转场结束前先显示静态播放器占位，避免 media_kit 原生播放器、
+  /// 事件流和 Video Surface 在导航首帧同步创建。
+  final RxBool playerRuntimeReady = false.obs;
+  Completer<void>? _playerRuntimeCompleter;
+  bool _playerRuntimeInitialized = false;
+  bool _playerRuntimeScheduled = false;
+  bool _closing = false;
+
   @override
   void onInit() {
     initSystem();
-    initStream();
-    //设置音量
-    player.setVolume(AppSettingsController.instance.playerVolume.value);
+    _schedulePlayerRuntimeInitialization();
     super.onInit();
+  }
+
+  void _schedulePlayerRuntimeInitialization() {
+    if (_playerRuntimeScheduled || _playerRuntimeInitialized) return;
+    _playerRuntimeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(
+        SliveMotion.route,
+      );
+      if (!_closing && !isClosed) {
+        try {
+          await ensurePlayerRuntimeReady();
+        } catch (_) {
+          // 初始化错误已经记录；后续播放地址加载会走现有错误处理。
+        }
+      }
+    });
+  }
+
+  Future<void> ensurePlayerRuntimeReady() {
+    final existing = _playerRuntimeCompleter;
+    if (existing != null) return existing.future;
+    if (_playerRuntimeInitialized) return Future<void>.value();
+
+    final completer = Completer<void>();
+    _playerRuntimeCompleter = completer;
+    () async {
+      try {
+        if (_closing || isClosed) {
+          completer.complete();
+          return;
+        }
+        _playerRuntimeInitialized = true;
+        initStream();
+        await player.setVolume(
+          AppSettingsController.instance.playerVolume.value,
+        );
+        if (!_closing && !isClosed) {
+          playerRuntimeReady.value = true;
+        }
+      } catch (error, stackTrace) {
+        Log.e('播放器运行时初始化失败: $error', stackTrace);
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+        return;
+      }
+      if (!completer.isCompleted) completer.complete();
+    }();
+    return completer.future;
   }
 
   StreamSubscription<String>? _errorSubscription;
@@ -797,8 +873,8 @@ class PlayerController extends BaseController
   }
 
   void mediaError(String error) {
-   // 弱网调整：用户自责
-   // WakelockPlus.disable();
+    // 弱网调整：用户自责
+    // WakelockPlus.disable();
   }
 
   Future<void> toggleOSDStats() async {
@@ -920,15 +996,42 @@ class PlayerController extends BaseController
   }
 
   @override
-  void onClose() async {
+  void onClose() {
     Log.w("播放器关闭");
+    _closing = true;
     if (smallWindowState.value) {
       exitSmallWindow();
     }
-    disposeStream();
-    disposeDanmakuController();
-    await resetSystem();
-    await player.dispose();
+
+    final runtimeInitialized = _playerRuntimeInitialized;
+    final closingDanmakuController = danmakuController;
+    danmakuController = null;
+    if (runtimeInitialized) {
+      disposeStream();
+    }
     super.onClose();
+
+    if (runtimeInitialized) {
+      // 路由销毁后先停声，但不在返回动画的完成帧销毁 native player。
+      // pause 是异步平台命令；不等待它，避免阻塞 GetX 的 route dispose。
+      unawaited(player.pause());
+    }
+
+    // player.dispose 会释放 Texture/native 解码器，和 WebSocket/Rust 清理
+    // 同帧执行时真机会连续出现 25~50ms 长帧。先错开时间，再交给 idle
+    // 优先级；若用户已经开始滚动，清理会自动让位给 animation 帧。
+    Future<void>.delayed(SliveMotion.playerCleanup, () {
+      SchedulerBinding.instance.scheduleTask<void>(
+        () async {
+          closingDanmakuController?.clear();
+          await resetSystem();
+          if (runtimeInitialized) {
+            await player.dispose();
+          }
+        },
+        Priority.idle,
+        debugLabel: 'slive-player-cleanup',
+      );
+    });
   }
 }

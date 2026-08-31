@@ -22,7 +22,7 @@ class LiquidGlassBottomBar extends StatelessWidget {
     required this.onDestinationSelected,
   });
 
-  static const Duration transitionDuration = Duration(milliseconds: 150);
+  static const Duration transitionDuration = Duration(milliseconds: 110);
 
   final List<LiquidGlassBottomBarDestination> destinations;
   final int selectedValue;
@@ -30,33 +30,35 @@ class LiquidGlassBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          14,
-          0,
-          14,
-          SliveLayout.bottomDockGap,
-        ),
-        child: SizedBox(
-          height: SliveLayout.bottomDockHeight,
-          child: _LiquidNavigationSurface(
-            radius: SliveRadii.dock,
-            child: Row(
-              children: destinations
-                  .map(
-                    (destination) => Expanded(
-                      child: _LiquidGlassNavigationItem(
-                        key: ValueKey<int>(destination.value),
-                        destination: destination,
-                        selected: selectedValue == destination.value,
-                        onTap: () => onDestinationSelected(destination.value),
-                        axis: Axis.horizontal,
+    return RepaintBoundary(
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            14,
+            0,
+            14,
+            SliveLayout.bottomDockGap,
+          ),
+          child: SizedBox(
+            height: SliveLayout.bottomDockHeight,
+            child: _LiquidNavigationSurface(
+              radius: SliveRadii.dock,
+              child: Row(
+                children: destinations
+                    .map(
+                      (destination) => Expanded(
+                        child: _LiquidGlassNavigationItem(
+                          key: ValueKey<int>(destination.value),
+                          destination: destination,
+                          selected: selectedValue == destination.value,
+                          onTap: () => onDestinationSelected(destination.value),
+                          axis: Axis.horizontal,
+                        ),
                       ),
-                    ),
-                  )
-                  .toList(growable: false),
+                    )
+                    .toList(growable: false),
+              ),
             ),
           ),
         ),
@@ -67,8 +69,7 @@ class LiquidGlassBottomBar extends StatelessWidget {
 
 /// PC 端主界面四项导航。
 ///
-/// 与移动 Dock 共用同一套局部柔光选中反馈。侧栏只绘制静态半透明材质，
-/// 不使用实时背景模糊、阴影或整栏透明度动画。
+/// 与移动 Dock 一样只通过图标和文字颜色表达选中态，不再叠加移动色块。
 class LiquidGlassSideRail extends StatelessWidget {
   const LiquidGlassSideRail({
     super.key,
@@ -83,30 +84,32 @@ class LiquidGlassSideRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 88,
-      child: _LiquidNavigationSurface(
-        radius: 0,
-        clipBehavior: Clip.hardEdge,
-        child: SafeArea(
-          right: false,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: destinations
-                .map(
-                  (destination) => SizedBox(
-                    height: 68,
-                    width: double.infinity,
-                    child: _LiquidGlassNavigationItem(
-                      key: ValueKey<int>(destination.value),
-                      destination: destination,
-                      selected: selectedValue == destination.value,
-                      onTap: () => onDestinationSelected(destination.value),
-                      axis: Axis.vertical,
+    return RepaintBoundary(
+      child: SizedBox(
+        width: 88,
+        child: _LiquidNavigationSurface(
+          radius: 0,
+          clipBehavior: Clip.hardEdge,
+          child: SafeArea(
+            right: false,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: destinations
+                  .map(
+                    (destination) => SizedBox(
+                      height: 68,
+                      width: double.infinity,
+                      child: _LiquidGlassNavigationItem(
+                        key: ValueKey<int>(destination.value),
+                        destination: destination,
+                        selected: selectedValue == destination.value,
+                        onTap: () => onDestinationSelected(destination.value),
+                        axis: Axis.vertical,
+                      ),
                     ),
-                  ),
-                )
-                .toList(growable: false),
+                  )
+                  .toList(growable: false),
+            ),
           ),
         ),
       ),
@@ -167,6 +170,8 @@ class _LiquidNavigationSurface extends StatelessWidget {
   }
 }
 
+/// 选中态不绘制任何背景实体。Dock 本身已经承担玻璃层级，额外色块会在
+/// 浅色与动态强调色下显得突兀；仅保留短促的图标/文字色彩过渡。
 class _LiquidGlassNavigationItem extends StatefulWidget {
   const _LiquidGlassNavigationItem({
     super.key,
@@ -203,15 +208,20 @@ class _LiquidGlassNavigationItemState
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final selectionDuration =
         reduceMotion ? Duration.zero : LiquidGlassBottomBar.transitionDuration;
-    final pressDuration = reduceMotion ? Duration.zero : SliveMotion.press;
+    final pressDuration =
+        reduceMotion ? Duration.zero : const Duration(milliseconds: 80);
     final inactiveColor = colors.textSecondary.withValues(
       alpha: isDark ? 0.80 : 0.74,
     );
     final activeColor = theme.colorScheme.primary;
+    final selectedIconColor = Color.lerp(
+      colors.textPrimary,
+      activeColor,
+      isDark ? 0.78 : 0.72,
+    )!;
+    final selectedLabelColor = selectedIconColor;
     final isVertical = widget.axis == Axis.vertical;
     final visualWidth = isVertical ? 62.0 : 68.0;
-    final auraWidth = isVertical ? 48.0 : 58.0;
-    final auraHeight = isVertical ? 40.0 : 38.0;
 
     return Semantics(
       container: true,
@@ -229,7 +239,7 @@ class _LiquidGlassNavigationItemState
           onTapCancel: () => _setPressed(false),
           child: Center(
             child: AnimatedScale(
-              scale: _pressed ? 0.96 : 1,
+              scale: _pressed ? 0.98 : 1,
               duration: pressDuration,
               curve: SliveMotion.standard,
               child: SizedBox(
@@ -243,82 +253,45 @@ class _LiquidGlassNavigationItemState
                     end: widget.selected ? 1 : 0,
                   ),
                   builder: (context, selectionProgress, child) {
-                    final foregroundColor = Color.lerp(
+                    final iconColor = Color.lerp(
                       inactiveColor,
-                      activeColor,
+                      selectedIconColor,
+                      selectionProgress,
+                    )!;
+                    final labelColor = Color.lerp(
+                      inactiveColor,
+                      selectedLabelColor,
                       selectionProgress,
                     )!;
 
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        IgnorePointer(
-                          child: Opacity(
-                            opacity: selectionProgress,
-                            child: Transform.scale(
-                              scale: 0.88 + (0.12 * selectionProgress),
-                              child: SizedBox(
-                                key: ValueKey<String>(
-                                  'liquid-navigation-selection-${widget.destination.value}',
-                                ),
-                                width: auraWidth,
-                                height: auraHeight,
-                                child: ClipOval(
-                                  clipBehavior: Clip.antiAlias,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: RadialGradient(
-                                        center: const Alignment(0, -0.08),
-                                        radius: 0.94,
-                                        colors: [
-                                          activeColor.withValues(
-                                            alpha: isDark ? 0.14 : 0.085,
-                                          ),
-                                          activeColor.withValues(
-                                            alpha: isDark ? 0.055 : 0.026,
-                                          ),
-                                          activeColor.withValues(alpha: 0),
-                                        ],
-                                        stops: const [0, 0.58, 1],
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                    return Center(
+                      child: SizedBox(
+                        height: 48,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              widget.destination.icon,
+                              size: isVertical ? 22.5 : 22,
+                              color: iconColor,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.destination.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.fade,
+                              softWrap: false,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: labelColor,
+                                fontSize: 10.5,
+                                height: 1.1,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.06,
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                        Transform.translate(
-                          offset: Offset(0, -0.45 * selectionProgress),
-                          child: SizedBox(
-                            height: 48,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  widget.destination.icon,
-                                  size: isVertical ? 22.5 : 22,
-                                  color: foregroundColor,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  widget.destination.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.fade,
-                                  softWrap: false,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: foregroundColor,
-                                    fontSize: 10.5,
-                                    height: 1.1,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.06,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     );
                   },
                 ),

@@ -46,6 +46,7 @@ import 'package:simple_live_app/modules/sync/remote_sync/webdav/remote_sync_webd
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/remote_sync_webdav_controller.dart';
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/remote_sync_webdav_page.dart';
 import 'package:simple_live_app/modules/sync/sync_page.dart';
+import 'package:simple_live_app/routes/slive_route_transition.dart';
 
 import '../modules/indexed/indexed_page.dart';
 import 'route_path.dart';
@@ -101,6 +102,10 @@ class AppPages {
     GetPage(
       name: RoutePath.kLiveRoomDetail,
       page: () => const LiveRoomPage(),
+      // 播放器包含持续更新的原生纹理，不参与普通页面的快照转场。直播间只
+      // 移动顶层页面，下层首页保持静止，避免 Texture 黑帧和双页视差残影。
+      customTransition: SliveRouteTransition(),
+      showCupertinoParallax: false,
       binding: BindingsBuilder.put(
         () => LiveRoomController(
           pSite: Get.arguments,

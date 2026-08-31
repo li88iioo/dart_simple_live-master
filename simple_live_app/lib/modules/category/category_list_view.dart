@@ -32,7 +32,7 @@ class CategoryListView extends StatelessWidget {
         color: Colors.transparent,
         child: Obx(
           () => EasyRefresh(
-            firstRefresh: true,
+            firstRefresh: false,
             controller: controller.easyRefreshController,
             onRefresh: controller.refreshData,
             header: MaterialHeader(

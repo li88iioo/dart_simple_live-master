@@ -238,56 +238,62 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   }
 
   Widget buildMediaPlayer({HuyaGiftOverlayPlacement? giftPlacement}) {
-    var boxFit = BoxFit.contain;
-    double? aspectRatio;
-    if (AppSettingsController.instance.scaleMode.value == 0) {
-      boxFit = BoxFit.contain;
-    } else if (AppSettingsController.instance.scaleMode.value == 1) {
-      boxFit = BoxFit.fill;
-    } else if (AppSettingsController.instance.scaleMode.value == 2) {
-      boxFit = BoxFit.cover;
-    } else if (AppSettingsController.instance.scaleMode.value == 3) {
-      boxFit = BoxFit.contain;
-      aspectRatio = 16 / 9;
-    } else if (AppSettingsController.instance.scaleMode.value == 4) {
-      boxFit = BoxFit.contain;
-      aspectRatio = 4 / 3;
-    }
-    return Stack(
-      children: [
-        Video(
-          key: controller.globalPlayerKey,
-          controller: controller.videoController,
-          pauseUponEnteringBackgroundMode:
-              AppSettingsController.instance.playerAutoPause.value,
-          resumeUponEnteringForegroundMode:
-              AppSettingsController.instance.playerAutoPause.value,
-          controls: (state) {
-            return playerControls(state, controller);
-          },
-          aspectRatio: aspectRatio,
-          fit: boxFit,
-          // 自己实现
-          wakelock: false,
-        ),
-        if (giftPlacement != null)
-          HuyaGiftDanmakuOverlay(
-            controller: controller,
-            placement: giftPlacement,
+    return Obx(() {
+      if (!controller.playerRuntimeReady.value) {
+        return const _PlayerWarmupPlaceholder();
+      }
+
+      var boxFit = BoxFit.contain;
+      double? aspectRatio;
+      if (AppSettingsController.instance.scaleMode.value == 0) {
+        boxFit = BoxFit.contain;
+      } else if (AppSettingsController.instance.scaleMode.value == 1) {
+        boxFit = BoxFit.fill;
+      } else if (AppSettingsController.instance.scaleMode.value == 2) {
+        boxFit = BoxFit.cover;
+      } else if (AppSettingsController.instance.scaleMode.value == 3) {
+        boxFit = BoxFit.contain;
+        aspectRatio = 16 / 9;
+      } else if (AppSettingsController.instance.scaleMode.value == 4) {
+        boxFit = BoxFit.contain;
+        aspectRatio = 4 / 3;
+      }
+      return Stack(
+        children: [
+          Video(
+            key: controller.globalPlayerKey,
+            controller: controller.videoController,
+            pauseUponEnteringBackgroundMode:
+                AppSettingsController.instance.playerAutoPause.value,
+            resumeUponEnteringForegroundMode:
+                AppSettingsController.instance.playerAutoPause.value,
+            controls: (state) {
+              return playerControls(state, controller);
+            },
+            aspectRatio: aspectRatio,
+            fit: boxFit,
+            // 自己实现
+            wakelock: false,
           ),
-        Obx(
-          () => Visibility(
-            visible: !controller.liveStatus.value,
-            child: const Center(
-              child: Text(
-                "未开播",
-                style: TextStyle(fontSize: 16, color: Colors.white),
+          if (giftPlacement != null)
+            HuyaGiftDanmakuOverlay(
+              controller: controller,
+              placement: giftPlacement,
+            ),
+          Obx(
+            () => Visibility(
+              visible: !controller.liveStatus.value,
+              child: const Center(
+                child: Text(
+                  "未开播",
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
               ),
             ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
+    });
   }
 
   Widget buildUserProfile(
@@ -465,7 +471,8 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         child: SliveGlassSurface(
           variant: SliveGlassVariant.dock,
           radius: 30,
-          enableBackdropBlur: true,
+          // Dock 位于高频滚动/视频附近，使用静态柔和玻璃，避免每帧重采样。
+          enableBackdropBlur: false,
           child: Row(
             children: [
               Expanded(
@@ -978,13 +985,42 @@ class LiveRoomPage extends GetView<LiveRoomController> {
 /// 参与布局与绘制，已访问页面由 keep-alive bucket 保存状态，不会像
 /// [Offstage] / [IndexedStack] 那样继续挂在活动 RenderObject 子链中布局。
 /// 索引变化直接跳页，只有新页面执行短距离 transform 合成动画。
+
+class _PlayerWarmupPlaceholder extends StatelessWidget {
+  const _PlayerWarmupPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.live_tv_rounded, size: 28, color: Colors.white54),
+            SizedBox(height: 8),
+            Text(
+              '正在准备播放器',
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class LiveRoomTabViewport extends StatefulWidget {
   const LiveRoomTabViewport({
     super.key,
     required this.index,
     required this.children,
-    this.duration = const Duration(milliseconds: 160),
-    this.curve = Curves.easeOutCubic,
+    this.duration = const Duration(milliseconds: 180),
+    this.curve = Curves.easeOutQuart,
   });
 
   final int index;
@@ -998,7 +1034,7 @@ class LiveRoomTabViewport extends StatefulWidget {
 
 class _LiveRoomTabViewportState extends State<LiveRoomTabViewport>
     with SingleTickerProviderStateMixin {
-  static const double _enterOffset = 8;
+  static const double _enterOffset = 5;
 
   late final AnimationController _animationController;
   late final ValueNotifier<int> _activeIndexNotifier;
@@ -1181,7 +1217,7 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
     with SingleTickerProviderStateMixin {
   static const Duration _chatTabHideDelay = Duration(milliseconds: 2800);
   static const Duration _bottomDockHideDelay = Duration(milliseconds: 2300);
-  static const Duration _tabSwitchDuration = Duration(milliseconds: 160);
+  static const Duration _tabSwitchDuration = Duration(milliseconds: 180);
   static const double _tabBarHeight = 42;
   static const double _tabContentInset = 50;
 
@@ -1445,7 +1481,7 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
             _showTabs(scheduleAutoHide: index == 0);
           },
           indicatorSize: TabBarIndicatorSize.tab,
-          indicatorAnimation: TabIndicatorAnimation.linear,
+          indicatorAnimation: TabIndicatorAnimation.elastic,
           indicatorPadding: const EdgeInsets.all(2),
           labelPadding: EdgeInsets.zero,
           dividerColor: Colors.transparent,
@@ -1456,11 +1492,6 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
               alpha: isDark ? 0.16 : 0.82,
             ),
             borderRadius: BorderRadius.circular(SliveRadii.pill),
-            border: Border.all(
-              color: colors.glassBorder.withValues(
-                alpha: context.sliveMaterials.borderOpacity * 0.72,
-              ),
-            ),
           ),
           tabs: [
             const Tab(text: '聊天'),

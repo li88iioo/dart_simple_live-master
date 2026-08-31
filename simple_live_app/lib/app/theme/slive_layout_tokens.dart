@@ -14,7 +14,9 @@ abstract final class SliveMotion {
   static const Duration press = Duration(milliseconds: 90);
   static const Duration selection = Duration(milliseconds: 180);
   static const Duration panel = Duration(milliseconds: 220);
-  static const Duration route = Duration(milliseconds: 200);
+  static const Duration route = Duration(milliseconds: 180);
+  static const Duration liveRoomCleanup = Duration(milliseconds: 320);
+  static const Duration playerCleanup = Duration(milliseconds: 520);
 
   static const Curve standard = Curves.easeOutCubic;
   static const Curve emphasized = Curves.easeInOutCubic;

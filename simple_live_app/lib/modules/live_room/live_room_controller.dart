@@ -5,6 +5,7 @@ import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:media_kit/media_kit.dart';
@@ -15,6 +16,7 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
+import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/app/utils/sandbox.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
@@ -42,6 +44,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   late DanmakuMask rustDanmakuMask;
 
   List<LiveMessage> danmakuBuffer = [];
+  Timer? _routeStartTimer;
   Timer? danmakuTimer;
   Timer? _superChatTimer;
   bool _isProcessingBuffer = false;
@@ -136,9 +139,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   @override
   void onInit() {
     WidgetsBinding.instance.addObserver(this);
-    if (FollowService.instance.followList.isEmpty) {
-      FollowService.instance.loadData();
-    }
     initAutoExit();
     showDanmakuState.value = AppSettingsController.instance.danmuEnable.value;
     _huyaGiftSettingWorker = ever<bool>(
@@ -152,7 +152,19 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     });
     followed.value =
         FollowService.instance.getFollowExist("${site.id}_$roomId");
-    loadData();
+    // 等顶层路由转场完成后再启动关注数据和直播间网络请求。之前只延后一帧，
+    // 房间详情、WebSocket 与响应式更新仍会撞进 180ms 的进入动画窗口。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isClosed) return;
+      _routeStartTimer = Timer(SliveMotion.route, () {
+        _routeStartTimer = null;
+        if (isClosed) return;
+        if (FollowService.instance.followList.isEmpty) {
+          FollowService.instance.loadData();
+        }
+        loadData();
+      });
+    });
 
     scrollController.addListener(scrollListener);
 
@@ -484,8 +496,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   /// 加载直播间信息
   void loadData() async {
+    final showLoadingDialog = detail.value != null;
     try {
-      SmartDialog.showLoading(msg: "");
+      if (showLoadingDialog) SmartDialog.showLoading(msg: "");
       loadError.value = false;
       // 虎牙贵宾数必须等待 WebSocket 快照，加载/刷新期间保持未知态。
       vipCount.value = site.id == Constant.kHuya ? null : 0;
@@ -548,7 +561,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         error = e;
       }
     } finally {
-      SmartDialog.dismiss(status: SmartStatus.loading);
+      if (showLoadingDialog) {
+        SmartDialog.dismiss(status: SmartStatus.loading);
+      }
     }
   }
 
@@ -636,7 +651,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       return Media(finalUrl, httpHeaders: playHeaders);
     }).toList();
 
-    // 初始化播放器并设置 ao 参数
+    // 路由动画期间不创建原生播放器；网络结果若提前返回则等待运行时就绪。
+    await ensurePlayerRuntimeReady();
+    if (isClosed) return;
     await initializePlayer();
 
     await player.open(Playlist(mediaList));
@@ -1191,20 +1208,38 @@ ${error?.stackTrace}''');
   void onClose() {
     WidgetsBinding.instance.removeObserver(this);
     scrollController.removeListener(scrollListener);
+    _routeStartTimer?.cancel();
+    _routeStartTimer = null;
     autoExitTimer?.cancel();
     _autoExitGraceTimer?.cancel();
     danmakuTimer?.cancel();
     _superChatTimer?.cancel();
+    _huyaGiftEffectTimer?.cancel();
     _huyaGiftSettingWorker?.dispose();
     _huyaGiftLiveStatusWorker?.dispose();
-    _clearHuyaGiftEffects();
-    _chatMessageBuffer.clear();
-    HistoryService.instance.stop();
 
-    liveDanmaku.stop();
+    // 返回手势/动画的关键帧里只停止会继续触发 UI 的监听与计时器。
+    // WebSocket 关闭、历史持久化、Rust 资源释放都延后到页面已经稳定后，
+    // 避免直播间返回叠加同步清理造成 16/24/33ms 长帧。
+    final closingDanmaku = liveDanmaku;
+    final danmakuMask = rustDanmakuMask;
+    final expectedHistoryId = '${site.id}_$roomId';
     danmakuController = null;
-    rustDanmakuMask.dispose();
     super.onClose();
+
+    Future<void>.delayed(SliveMotion.liveRoomCleanup, () {
+      SchedulerBinding.instance.scheduleTask<void>(
+        () async {
+          _huyaGiftQueue.clear();
+          _chatMessageBuffer.clear();
+          HistoryService.instance.stop(expectedRoomId: expectedHistoryId);
+          await closingDanmaku.stop();
+          danmakuMask.dispose();
+        },
+        Priority.idle,
+        debugLabel: 'slive-live-room-cleanup',
+      );
+    });
   }
 }
 

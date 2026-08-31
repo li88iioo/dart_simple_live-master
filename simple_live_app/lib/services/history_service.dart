@@ -55,7 +55,10 @@ class HistoryService extends GetxService {
   }
 
   /// 停止计时并提交本次会话最后一段观看时长。
-  void stop() {
+  void stop({String? expectedRoomId}) {
+    if (expectedRoomId != null && curLiveRoomHistory?.id != expectedRoomId) {
+      return;
+    }
     _timer?.cancel();
     _timer = null;
     _stopwatch.stop();

@@ -15,12 +15,14 @@ class LiveRoomCard extends StatelessWidget {
     super.key,
     this.onLongPress,
     this.onFollowRemove,
+    this.coverMaxDecodeDensity = 3,
   });
 
   final Site site;
   final LiveRoomItem item;
   final Function()? onLongPress;
   final Function()? onFollowRemove;
+  final double coverMaxDecodeDensity;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +30,9 @@ class LiveRoomCard extends StatelessWidget {
     return SliveGlassSurface(
       variant: SliveGlassVariant.card,
       radius: SliveRadii.card,
+      enableBackdropBlur: false,
+      showShadow: false,
+      clipBehavior: Clip.hardEdge,
       onTap: () {
         AppNavigator.toLiveRoomDetail(site: site, roomId: item.roomId);
       },
@@ -44,11 +49,13 @@ class LiveRoomCard extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(SliveRadii.cover),
+                    clipBehavior: Clip.hardEdge,
                     child: NetImage(
                       item.cover,
                       fit: BoxFit.cover,
                       width: double.infinity,
                       height: double.infinity,
+                      maxDecodeDensity: coverMaxDecodeDensity,
                     ),
                   ),
                   Positioned(

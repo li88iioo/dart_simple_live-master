@@ -15,6 +15,9 @@ class SliveAnimatedIndexedStack extends StatefulWidget {
     required this.index,
     required this.children,
     this.duration = defaultDuration,
+    this.transitionDistance = 7,
+    this.prebuildMountedChildren = false,
+    this.precacheAdjacentPages = false,
   });
 
   static const Duration defaultDuration = Duration(milliseconds: 150);
@@ -22,6 +25,14 @@ class SliveAnimatedIndexedStack extends StatefulWidget {
   final int index;
   final List<Widget> children;
   final Duration duration;
+  final double transitionDistance;
+
+  /// 将已经提供的页面保持在同一个 Stack 中，适合少量、需要后台预热的页面。
+  /// 未选中的页面停止 ticker、交互和语义，并且不会参与绘制。
+  final bool prebuildMountedChildren;
+
+  /// 让 PageView 额外缓存相邻页面，降低平台 Tab 首次切换的构建峰值。
+  final bool precacheAdjacentPages;
 
   @override
   State<SliveAnimatedIndexedStack> createState() =>
@@ -69,12 +80,15 @@ class _SliveAnimatedIndexedStackState extends State<SliveAnimatedIndexedStack>
     _direction = nextIndex > _currentIndex ? 1 : -1;
     _currentIndex = nextIndex;
     _activeIndex.value = nextIndex;
-    _jumpToCurrentPage();
+    if (!widget.prebuildMountedChildren) {
+      _jumpToCurrentPage();
+    }
 
     // forward(from: 0) 可立即中断上一次位移；PageView 已通过 jumpToPage
     // 切到新页，因此动画期间只有新页被绘制。
     if (MediaQuery.disableAnimationsOf(context) ||
-        widget.duration == Duration.zero) {
+        widget.duration == Duration.zero ||
+        widget.transitionDistance == 0) {
       _transitionController.value = 1;
     } else {
       _transitionController.forward(from: 0);
@@ -110,30 +124,67 @@ class _SliveAnimatedIndexedStackState extends State<SliveAnimatedIndexedStack>
         ? const AlwaysStoppedAnimation<double>(1)
         : _transitionController;
 
+    final pageHost = widget.prebuildMountedChildren
+        ? Stack(
+            fit: StackFit.expand,
+            children: List<Widget>.generate(
+              widget.children.length,
+              (index) {
+                final active = index == _currentIndex;
+                return Positioned.fill(
+                  child: Offstage(
+                    offstage: !active,
+                    child: TickerMode(
+                      enabled: active,
+                      child: ExcludeFocus(
+                        excluding: !active,
+                        child: ExcludeSemantics(
+                          excluding: !active,
+                          child: IgnorePointer(
+                            ignoring: !active,
+                            child: widget.children[index],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              growable: false,
+            ),
+          )
+        : PageView.custom(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            allowImplicitScrolling: widget.precacheAdjacentPages,
+            childrenDelegate: SliverChildBuilderDelegate(
+              (context, index) => _KeepAliveIndexedPage(
+                key: ValueKey<int>(index),
+                index: index,
+                activeIndex: _activeIndex,
+                child: widget.children[index],
+              ),
+              childCount: widget.children.length,
+              addAutomaticKeepAlives: true,
+              addRepaintBoundaries: false,
+              addSemanticIndexes: false,
+            ),
+          );
+
+    if (reduceMotion || widget.transitionDistance == 0) {
+      return ClipRect(child: pageHost);
+    }
+
     return ClipRect(
       child: AnimatedBuilder(
         animation: animation,
-        child: PageView.custom(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          allowImplicitScrolling: false,
-          childrenDelegate: SliverChildBuilderDelegate(
-            (context, index) => _KeepAliveIndexedPage(
-              key: ValueKey<int>(index),
-              index: index,
-              activeIndex: _activeIndex,
-              child: widget.children[index],
-            ),
-            childCount: widget.children.length,
-            addAutomaticKeepAlives: true,
-            addRepaintBoundaries: false,
-            addSemanticIndexes: false,
-          ),
-        ),
+        child: pageHost,
         builder: (context, child) {
           final progress = SliveMotion.standard.transform(animation.value);
-          final horizontalOffset = _direction * 7 * (1 - progress);
+          final horizontalOffset =
+              _direction * widget.transitionDistance * (1 - progress);
           return Transform.translate(
+            key: const ValueKey<String>('slive-indexed-page-transition'),
             offset: Offset(horizontalOffset, 0),
             child: child,
           );
@@ -153,11 +204,20 @@ class SliveTabIndexedStack extends StatefulWidget {
     required this.controller,
     required this.children,
     this.duration = SliveAnimatedIndexedStack.defaultDuration,
+    this.transitionDistance = 0,
+    this.prebuildChildren = true,
+    this.precacheAdjacentPages = true,
   });
 
   final TabController controller;
   final List<Widget> children;
   final Duration duration;
+  final double transitionDistance;
+
+  /// 平台数量很少且页面网络请求由控制器按选中项触发。预构建空页面后用
+  /// Offstage 切换，避免 PageView.jumpToPage 在重列表之间重新布局。
+  final bool prebuildChildren;
+  final bool precacheAdjacentPages;
 
   @override
   State<SliveTabIndexedStack> createState() => _SliveTabIndexedStackState();
@@ -165,6 +225,8 @@ class SliveTabIndexedStack extends StatefulWidget {
 
 class _SliveTabIndexedStackState extends State<SliveTabIndexedStack> {
   late int _index = _resolveIndex();
+  int? _pendingIndex;
+  bool _switchScheduled = false;
 
   int _resolveIndex() {
     if (widget.children.isEmpty) return 0;
@@ -183,14 +245,37 @@ class _SliveTabIndexedStackState extends State<SliveTabIndexedStack> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_handleControllerChange);
       widget.controller.addListener(_handleControllerChange);
+      _pendingIndex = null;
+      _switchScheduled = false;
+      _index = _resolveIndex();
+      return;
     }
-    _index = _resolveIndex();
+
+    // 普通父级重建不应越过已经排队的一帧内容切换，否则胶囊反馈与重型
+    // 页面构建又会回到同一帧。仅在 children 的有效索引范围变化时校正。
+    if (oldWidget.children.length != widget.children.length) {
+      _index = _resolveIndex();
+    }
   }
 
   void _handleControllerChange() {
     final nextIndex = _resolveIndex();
     if (!mounted || nextIndex == _index) return;
-    setState(() => _index = nextIndex);
+
+    // TabController.animateTo 会先同步修改 index，再开始选中胶囊动画。
+    // 将重型内容页延后一帧切换，保证点击后的第一帧先展示导航反馈，
+    // 避免首次构建列表把整段胶囊动画堵在同一个 UI 帧里。
+    _pendingIndex = nextIndex;
+    if (_switchScheduled) return;
+    _switchScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _switchScheduled = false;
+      if (!mounted) return;
+      final targetIndex = _pendingIndex;
+      _pendingIndex = null;
+      if (targetIndex == null || targetIndex == _index) return;
+      setState(() => _index = targetIndex);
+    });
   }
 
   @override
@@ -204,6 +289,9 @@ class _SliveTabIndexedStackState extends State<SliveTabIndexedStack> {
     return SliveAnimatedIndexedStack(
       index: _index,
       duration: widget.duration,
+      transitionDistance: widget.transitionDistance,
+      prebuildMountedChildren: widget.prebuildChildren,
+      precacheAdjacentPages: widget.precacheAdjacentPages,
       children: widget.children,
     );
   }

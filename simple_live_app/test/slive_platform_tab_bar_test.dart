@@ -44,6 +44,84 @@ void main() {
     expect(key.currentState?.selectedIndex, 2);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('平台切换使用唯一共享胶囊并连续移动', (tester) async {
+    final key = GlobalKey<_PlatformTabHarnessState>();
+    await tester.binding.setSurfaceSize(const Size(430, 160));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppStyle.light(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6F8FD8),
+          ),
+          glassMode: SliveGlassMode.soft,
+        ),
+        home: Scaffold(
+          body: SafeArea(
+            child: _PlatformTabHarness(key: key, sites: sites),
+          ),
+        ),
+      ),
+    );
+
+    final selection = find.byKey(
+      const ValueKey<String>('slive-platform-shared-selection'),
+    );
+    expect(selection, findsOneWidget);
+
+    final decoration = tester.widget<DecoratedBox>(
+      find.descendant(of: selection, matching: find.byType(DecoratedBox)),
+    );
+    final boxDecoration = decoration.decoration as BoxDecoration;
+    expect(boxDecoration.border, isNull);
+    expect(boxDecoration.boxShadow, isNull);
+
+    final initialLeft = tester.getTopLeft(selection).dx;
+    await tester.tap(find.text('虎牙直播'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final movingLeft = tester.getTopLeft(selection).dx;
+    expect(movingLeft, greaterThan(initialLeft));
+
+    await tester.pump(const Duration(milliseconds: 180));
+    final finalLeft = tester.getTopLeft(selection).dx;
+    expect(finalLeft, greaterThan(movingLeft));
+    expect(key.currentState?.selectedIndex, 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('无尾部按钮的移动平台栏完整填充且不留异常空段', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 160));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppStyle.light(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6F8FD8),
+          ),
+          glassMode: SliveGlassMode.soft,
+        ),
+        home: Scaffold(
+          body: SafeArea(
+            child: _PlatformTabHarness(sites: sites),
+          ),
+        ),
+      ),
+    );
+
+    final selection = find.byKey(
+      const ValueKey<String>('slive-platform-shared-selection'),
+    );
+    final bar = find.byType(SlivePlatformTabBar);
+    final selectionWidth = tester.getSize(selection).width;
+    final barWidth = tester.getSize(bar).width;
+
+    expect(selectionWidth * sites.length, greaterThan(barWidth * 0.92));
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _PlatformTabHarness extends StatefulWidget {

@@ -23,6 +23,7 @@ class PageGridView extends StatelessWidget {
     this.showPCRefreshButton = true,
     this.mainAxisExtent,
     this.cacheExtent = 360,
+    this.useNativeScrollPhysics = false,
     super.key,
   });
 
@@ -39,41 +40,87 @@ class PageGridView extends StatelessWidget {
   final double? mainAxisExtent;
   final double cacheExtent;
 
+  /// 首页等高频滚动页面使用平台原生滚动物理，避免旧版 EasyRefresh
+  /// 强制套用 iOS 弹性减速曲线而产生拖黏感。
+  final bool useNativeScrollPhysics;
+
   bool get _isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
+  ScrollPhysics get _platformScrollPhysics => Platform.isIOS || Platform.isMacOS
+      ? const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics())
+      : const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+
   @override
   Widget build(BuildContext context) {
-    // EasyRefresh 必须直接接收 ScrollView。若在 GridView 外再包一层 Obx，
-    // EasyRefresh 会把它当作普通 Box 放进 SliverToBoxAdapter，最终形成
-    // “纵向 viewport 高度无界”的嵌套视口，接口已有数据也无法渲染。
-    return Obx(
-      () => Stack(
-        children: [
-          EasyRefresh(
-            header: MaterialHeader(
-              completeDuration: const Duration(milliseconds: 400),
-            ),
-            footer: MaterialFooter(
-              completeDuration: const Duration(milliseconds: 400),
-            ),
-            scrollController: pageController.scrollController,
-            controller: pageController.easyRefreshController,
-            firstRefresh: firstRefresh,
-            onLoad: pageController.loadData,
-            onRefresh: pageController.refreshData,
-            child: _buildGrid(),
+    // 网格和状态层分开订阅：加载/错误状态切换不再重建 EasyRefresh 与 GridView。
+    // EasyRefresh 仍然直接接收 ScrollView，避免旧版本产生无界嵌套 viewport。
+    return Stack(
+      children: [
+        Obx(
+          () => useNativeScrollPhysics
+              ? _buildNativeScrollable()
+              : EasyRefresh(
+                  header: MaterialHeader(
+                    completeDuration: const Duration(milliseconds: 400),
+                  ),
+                  footer: MaterialFooter(
+                    completeDuration: const Duration(milliseconds: 400),
+                  ),
+                  scrollController: pageController.scrollController,
+                  controller: pageController.easyRefreshController,
+                  firstRefresh: firstRefresh,
+                  onLoad: pageController.loadData,
+                  onRefresh: pageController.refreshData,
+                  child: _buildGrid(),
+                ),
+        ),
+        Positioned.fill(
+          child: Obx(
+            () => Stack(children: _buildStatusLayer()),
           ),
-          ..._buildStatusLayer(),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNativeScrollable() {
+    // 在 Android/桌面保持平台原生的直接减速，不使用 EasyRefresh 2.x 的
+    // BouncingScrollSimulation。加载更多只在接近列表底部时触发。
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        final metrics = notification.metrics;
+        if (notification is ScrollEndNotification &&
+            metrics.axis == Axis.vertical &&
+            metrics.extentAfter < 560 &&
+            metrics.pixels > 0 &&
+            pageController.canLoadMore.value &&
+            !pageController.loadding) {
+          // 快速 fling 期间不发起网络请求、不追加列表；等滚动物理过程结束后
+          // 再加载下一页，避免数据通知和图片解码抢占 8.33ms 帧预算。
+          pageController.loadData();
+        }
+        return false;
+      },
+      child: RefreshIndicator.adaptive(
+        onRefresh: () async => pageController.refreshData(),
+        child: _buildGrid(
+          controller: pageController.scrollController,
+          physics: _platformScrollPhysics,
+        ),
       ),
     );
   }
 
-  Widget _buildGrid() {
+  Widget _buildGrid({
+    ScrollController? controller,
+    ScrollPhysics? physics,
+  }) {
     final itemCount = pageController.list.length;
     if (mainAxisExtent case final extent?) {
       return GridView.builder(
+        controller: controller,
+        physics: physics,
         padding: padding,
         cacheExtent: cacheExtent,
         itemCount: itemCount,
@@ -89,6 +136,8 @@ class PageGridView extends StatelessWidget {
     }
 
     return MasonryGridView.count(
+      controller: controller,
+      physics: physics,
       padding: padding,
       cacheExtent: cacheExtent,
       itemCount: itemCount,

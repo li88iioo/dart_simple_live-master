@@ -26,7 +26,7 @@ void main() {
     ),
   ];
 
-  testWidgets('移动底栏选中层无 Border、BoxShadow 和 BackdropFilter', (tester) async {
+  testWidgets('移动底栏完全不绘制选中背景、投影和实时模糊', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(
@@ -43,30 +43,13 @@ void main() {
         ),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
 
-    final selectionFinder = find.byKey(
-      const ValueKey<String>('liquid-navigation-selection-0'),
-    );
-    final selectedDecoration = tester.widget<DecoratedBox>(
-      find.descendant(
-        of: selectionFinder,
-        matching: find.byType(DecoratedBox),
-      ),
-    );
-    final boxDecoration = selectedDecoration.decoration as BoxDecoration;
-
-    expect(boxDecoration.border, isNull);
-    expect(boxDecoration.boxShadow, isNull);
-    expect(boxDecoration.gradient, isA<RadialGradient>());
-    expect(tester.getSize(selectionFinder).width, lessThanOrEqualTo(58));
-    expect(tester.getSize(selectionFinder).height, lessThanOrEqualTo(40));
     expect(
-      find.descendant(
-        of: selectionFinder,
-        matching: find.byType(ClipOval),
+      find.byKey(
+        const ValueKey<String>('liquid-navigation-selection-horizontal'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(
@@ -75,10 +58,22 @@ void main() {
       ),
       findsNothing,
     );
+    expect(
+      find.descendant(
+        of: find.byType(LiquidGlassBottomBar),
+        matching: find.byType(RepaintBoundary),
+      ),
+      findsWidgets,
+    );
     _expectNoBoxShadow(tester, find.byType(LiquidGlassBottomBar));
+
+    final selectedIcon = tester.widget<Icon>(find.byIcon(Icons.home_outlined));
+    final inactiveIcon =
+        tester.widget<Icon>(find.byIcon(Icons.favorite_border));
+    expect(selectedIcon.color, isNot(inactiveIcon.color));
   });
 
-  testWidgets('移动底栏切换可用且整栏没有 Opacity 包裹', (tester) async {
+  testWidgets('移动底栏切换只过渡图标与文字颜色', (tester) async {
     final selectedValue = ValueNotifier<int>(0);
     addTearDown(selectedValue.dispose);
 
@@ -101,28 +96,26 @@ void main() {
       ),
     );
 
-    expect(
-      find.ancestor(
-        of: find.byType(LiquidGlassBottomBar),
-        matching: find.byType(Opacity),
-      ),
-      findsNothing,
-    );
-
+    final oldSelectedColor =
+        tester.widget<Icon>(find.byIcon(Icons.home_outlined)).color;
     await tester.tap(find.text('关注'));
-    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
 
     expect(selectedValue.value, 1);
     expect(
       find.byKey(
-        const ValueKey<String>('liquid-navigation-selection-1'),
+        const ValueKey<String>('liquid-navigation-selection-horizontal'),
       ),
-      findsOneWidget,
+      findsNothing,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.favorite_border)).color,
+      oldSelectedColor,
     );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('PC 侧栏在深色与减少动画模式下复用无边框轻柔光', (tester) async {
+  testWidgets('PC 侧栏同样不绘制选中背景且支持减少动画', (tester) async {
     final selectedValue = ValueNotifier<int>(2);
     addTearDown(selectedValue.dispose);
 
@@ -158,25 +151,11 @@ void main() {
     );
     await tester.pump();
 
-    final selectionFinder = find.byKey(
-      const ValueKey<String>('liquid-navigation-selection-2'),
-    );
-    final selectedDecoration = tester.widget<DecoratedBox>(
-      find.descendant(
-        of: selectionFinder,
-        matching: find.byType(DecoratedBox),
-      ),
-    );
-    final boxDecoration = selectedDecoration.decoration as BoxDecoration;
-
-    expect(boxDecoration.border, isNull);
-    expect(boxDecoration.boxShadow, isNull);
     expect(
-      find.descendant(
-        of: selectionFinder,
-        matching: find.byType(ClipOval),
+      find.byKey(
+        const ValueKey<String>('liquid-navigation-selection-vertical'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(
@@ -185,31 +164,20 @@ void main() {
       ),
       findsNothing,
     );
-    expect(
-      find.ancestor(
-        of: find.byType(LiquidGlassSideRail),
-        matching: find.byType(Opacity),
-      ),
-      findsNothing,
-    );
     _expectNoBoxShadow(tester, find.byType(LiquidGlassSideRail));
 
     await tester.tap(find.text('我的'));
     await tester.pump();
-
     expect(selectedValue.value, 3);
     expect(tester.takeException(), isNull);
   });
 }
 
 void _expectNoBoxShadow(WidgetTester tester, Finder root) {
-  final decoratedBoxes = find.descendant(
-    of: root,
-    matching: find.byType(DecoratedBox),
-  );
-
-  for (final element in decoratedBoxes.evaluate()) {
-    final decoration = (element.widget as DecoratedBox).decoration;
+  for (final decoratedBox in tester.widgetList<DecoratedBox>(
+    find.descendant(of: root, matching: find.byType(DecoratedBox)),
+  )) {
+    final decoration = decoratedBox.decoration;
     if (decoration is BoxDecoration) {
       expect(decoration.boxShadow, anyOf(isNull, isEmpty));
     }

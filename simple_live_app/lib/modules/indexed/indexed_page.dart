@@ -42,10 +42,17 @@ class IndexedPage extends GetView<IndexedController> {
                   ),
                 Expanded(
                   child: Obx(
-                    () => SliveAnimatedIndexedStack(
-                      index: controller.index.value,
-                      children: controller.pages,
-                    ),
+                    () {
+                      // 后台预热静态“我的”页时只触发这一处重建；页面随后保持
+                      // Offstage 挂载，首次点击不再同步创建整棵设置页组件树。
+                      controller.pageRevision.value;
+                      return SliveAnimatedIndexedStack(
+                        index: controller.index.value,
+                        transitionDistance: 0,
+                        prebuildMountedChildren: true,
+                        children: controller.pages,
+                      );
+                    },
                   ),
                 ),
               ],

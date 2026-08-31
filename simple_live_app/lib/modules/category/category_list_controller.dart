@@ -7,6 +7,16 @@ class CategoryListController extends BasePageController<AppLiveCategory> {
   CategoryListController(this.site);
 
   final Site site;
+  bool _initialLoadRequested = false;
+
+  Future<void> ensureInitialLoad() async {
+    if (_initialLoadRequested || list.isNotEmpty || loadding) return;
+    _initialLoadRequested = true;
+    await refreshData();
+    if (list.isEmpty && pageError.value) {
+      _initialLoadRequested = false;
+    }
+  }
 
   @override
   Future<List<AppLiveCategory>> getData(int page, int pageSize) async {

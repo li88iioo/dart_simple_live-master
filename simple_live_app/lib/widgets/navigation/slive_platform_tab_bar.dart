@@ -5,9 +5,9 @@ import 'package:simple_live_app/widgets/glass/slive_glass_surface.dart';
 
 /// 首页、分类与搜索页共用的平台切换栏。
 ///
-/// 选中层只使用 opacity/scale 微动效，不绘制阴影，也不启用实时
-/// BackdropFilter。点击时显式使用 150ms TabController 动画，避免 Flutter
-/// 默认较长的页签过渡让重型列表显得拖沓。
+/// 所有平台共享同一个选中胶囊，胶囊直接跟随 [TabController.animation]
+/// 在相邻项之间连续移动。各项使用统一宽度模型，避免移动端与桌面端因为
+/// 文本测量或窗口宽度变化产生错位；空间不足时仍可横向滚动。
 class SlivePlatformTabBar extends StatefulWidget {
   const SlivePlatformTabBar({
     super.key,
@@ -17,7 +17,7 @@ class SlivePlatformTabBar extends StatefulWidget {
     this.animationDuration = transitionDuration,
   });
 
-  static const Duration transitionDuration = Duration(milliseconds: 150);
+  static const Duration transitionDuration = Duration(milliseconds: 180);
 
   final TabController controller;
   final List<Site> sites;
@@ -29,6 +29,13 @@ class SlivePlatformTabBar extends StatefulWidget {
 }
 
 class _SlivePlatformTabBarState extends State<SlivePlatformTabBar> {
+  static const double _barHeight = 44;
+  static const double _capsuleHeight = 36;
+  static const double _contentPadding = 4;
+  static const double _itemGap = 2;
+  static const double _minimumItemExtent = 92;
+  static const double _maximumItemExtent = 112;
+
   late int _selectedIndex = _resolveIndex();
 
   int _resolveIndex() {
@@ -67,8 +74,59 @@ class _SlivePlatformTabBarState extends State<SlivePlatformTabBar> {
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
           : widget.animationDuration,
-      curve: SliveMotion.standard,
+      curve: Curves.easeOutQuart,
     );
+  }
+
+  double _indicatorPosition({required bool reduceMotion}) {
+    if (reduceMotion) return _selectedIndex.toDouble();
+    final value = widget.controller.animation?.value;
+    return (value ?? _selectedIndex.toDouble())
+        .clamp(0.0, widget.sites.length - 1.0)
+        .toDouble();
+  }
+
+  Color _platformFill({
+    required BuildContext context,
+    required int index,
+  }) {
+    final colors = context.sliveColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final platformColor = colors.platform(widget.sites[index].id);
+
+    return Color.alphaBlend(
+      platformColor.withValues(alpha: isDark ? 0.17 : 0.105),
+      colors.glassStrong.withValues(alpha: isDark ? 0.82 : 0.96),
+    );
+  }
+
+  Color _indicatorFill(BuildContext context, double position) {
+    final lowerIndex = position.floor().clamp(0, widget.sites.length - 1);
+    final upperIndex = position.ceil().clamp(0, widget.sites.length - 1);
+    if (lowerIndex == upperIndex) {
+      return _platformFill(context: context, index: lowerIndex);
+    }
+
+    return Color.lerp(
+      _platformFill(context: context, index: lowerIndex),
+      _platformFill(context: context, index: upperIndex),
+      position - lowerIndex,
+    )!;
+  }
+
+  double _resolveItemExtent(double viewportWidth) {
+    final gapWidth = _itemGap * (widget.sites.length - 1);
+    final usableWidth = viewportWidth - (_contentPadding * 2) - gapWidth;
+    final fittedExtent = usableWidth / widget.sites.length;
+
+    // 手机宽度优先完整填满，避免分类页没有 trailing 时右侧出现大片空白；
+    // 桌面宽屏限制单项宽度，并由外层将整组平台项居中。
+    if (viewportWidth <= 600 && fittedExtent >= _minimumItemExtent) {
+      return fittedExtent;
+    }
+    return fittedExtent
+        .clamp(_minimumItemExtent, _maximumItemExtent)
+        .toDouble();
   }
 
   @override
@@ -81,12 +139,8 @@ class _SlivePlatformTabBarState extends State<SlivePlatformTabBar> {
   Widget build(BuildContext context) {
     if (widget.sites.isEmpty) return const SizedBox.shrink();
 
-    final theme = Theme.of(context);
-    final colors = context.sliveColors;
-    final isDark = theme.brightness == Brightness.dark;
-
     final bar = SizedBox(
-      height: 44,
+      height: _barHeight,
       child: SliveGlassSurface(
         variant: SliveGlassVariant.pill,
         enableBackdropBlur: false,
@@ -94,40 +148,112 @@ class _SlivePlatformTabBarState extends State<SlivePlatformTabBar> {
         shadowColor: Colors.transparent,
         radius: SliveRadii.pill,
         clipBehavior: Clip.hardEdge,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const ClampingScrollPhysics(),
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            children: List<Widget>.generate(widget.sites.length, (index) {
-              final site = widget.sites[index];
-              final selected = index == _selectedIndex;
-              final activeColor = colors.platform(site.id);
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final viewportWidth = constraints.hasBoundedWidth
+                ? constraints.maxWidth
+                : (_maximumItemExtent * widget.sites.length) +
+                    (_itemGap * (widget.sites.length - 1)) +
+                    (_contentPadding * 2);
+            final itemExtent = _resolveItemExtent(viewportWidth);
+            final contentWidth = (itemExtent * widget.sites.length) +
+                (_itemGap * (widget.sites.length - 1));
+            final reduceMotion = MediaQuery.disableAnimationsOf(context);
+            final animation = widget.controller.animation ?? widget.controller;
 
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index == widget.sites.length - 1 ? 0 : 2,
-                ),
-                child: _PlatformTabButton(
-                  key: ValueKey<String>(site.id),
-                  site: site,
-                  selected: selected,
-                  activeColor: activeColor,
-                  selectedFill: Color.alphaBlend(
-                    activeColor.withValues(alpha: isDark ? 0.17 : 0.10),
-                    colors.glassStrong.withValues(
-                      alpha: isDark ? 0.76 : 0.94,
+            final availableContentWidth =
+                (viewportWidth - (_contentPadding * 2))
+                    .clamp(0.0, double.infinity)
+                    .toDouble();
+            final trackWidth = contentWidth < availableContentWidth
+                ? availableContentWidth
+                : contentWidth;
+
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.all(_contentPadding),
+              child: SizedBox(
+                width: trackWidth,
+                height: _capsuleHeight,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    width: contentWidth,
+                    height: _capsuleHeight,
+                    child: AnimatedBuilder(
+                      animation: animation,
+                      builder: (context, _) {
+                        final position = _indicatorPosition(
+                          reduceMotion: reduceMotion,
+                        );
+                        final stride = itemExtent + _itemGap;
+                        final indicatorFill = _indicatorFill(context, position);
+
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: RepaintBoundary(
+                                child: Transform.translate(
+                                  offset: Offset(position * stride, 0),
+                                  child: _SharedSelectionCapsule(
+                                    key: const ValueKey<String>(
+                                      'slive-platform-shared-selection',
+                                    ),
+                                    width: itemExtent,
+                                    height: _capsuleHeight,
+                                    color: indicatorFill,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: List<Widget>.generate(
+                                widget.sites.length,
+                                (index) {
+                                  final site = widget.sites[index];
+                                  final selectionProgress =
+                                      (1 - (position - index).abs())
+                                          .clamp(0.0, 1.0)
+                                          .toDouble();
+
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                      right: index == widget.sites.length - 1
+                                          ? 0
+                                          : _itemGap,
+                                    ),
+                                    child: SizedBox(
+                                      width: itemExtent,
+                                      height: _capsuleHeight,
+                                      child: _PlatformTabButton(
+                                        key: ValueKey<String>(site.id),
+                                        site: site,
+                                        selected: index == _selectedIndex,
+                                        selectionProgress: selectionProgress,
+                                        activeColor:
+                                            context.sliveColors.platform(
+                                          site.id,
+                                        ),
+                                        onTap: () => _select(index),
+                                      ),
+                                    ),
+                                  );
+                                },
+                                growable: false,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
-                  selectedBorder: activeColor.withValues(
-                    alpha: isDark ? 0.34 : 0.24,
-                  ),
-                  duration: widget.animationDuration,
-                  onTap: () => _select(index),
                 ),
-              );
-            }, growable: false),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -144,24 +270,59 @@ class _SlivePlatformTabBarState extends State<SlivePlatformTabBar> {
   }
 }
 
+class _SharedSelectionCapsule extends StatelessWidget {
+  const _SharedSelectionCapsule({
+    super.key,
+    required this.width,
+    required this.height,
+    required this.color,
+  });
+
+  final double width;
+  final double height;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(SliveRadii.pill),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.alphaBlend(
+                Colors.white.withValues(alpha: isDark ? 0.035 : 0.18),
+                color,
+              ),
+              color,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PlatformTabButton extends StatefulWidget {
   const _PlatformTabButton({
     super.key,
     required this.site,
     required this.selected,
+    required this.selectionProgress,
     required this.activeColor,
-    required this.selectedFill,
-    required this.selectedBorder,
-    required this.duration,
     required this.onTap,
   });
 
   final Site site;
   final bool selected;
+  final double selectionProgress;
   final Color activeColor;
-  final Color selectedFill;
-  final Color selectedBorder;
-  final Duration duration;
   final VoidCallback onTap;
 
   @override
@@ -181,94 +342,65 @@ class _PlatformTabButtonState extends State<_PlatformTabButton> {
     final theme = Theme.of(context);
     final colors = context.sliveColors;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final duration = reduceMotion ? Duration.zero : widget.duration;
-    final foreground = widget.selected
-        ? Color.lerp(widget.activeColor, colors.textPrimary, 0.18)!
-        : colors.textSecondary;
-
-    final label = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            widget.site.logo,
-            width: 18,
-            height: 18,
-            filterQuality: FilterQuality.low,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            widget.site.name,
-            maxLines: 1,
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: foreground,
-              fontWeight: widget.selected ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
+    final selectedForeground = Color.lerp(
+      widget.activeColor,
+      colors.textPrimary,
+      0.24,
+    )!;
+    final foreground = Color.lerp(
+      colors.textSecondary,
+      selectedForeground,
+      widget.selectionProgress,
+    )!;
 
     return Semantics(
       button: true,
       selected: widget.selected,
       label: widget.site.name,
       child: ExcludeSemantics(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          onTapDown: (_) => _setPressed(true),
-          onTapUp: (_) => _setPressed(false),
-          onTapCancel: () => _setPressed(false),
-          child: AnimatedScale(
-            scale: _pressed ? 0.975 : 1,
-            duration: reduceMotion ? Duration.zero : SliveMotion.press,
-            curve: SliveMotion.standard,
-            child: TweenAnimationBuilder<double>(
-              duration: duration,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: widget.onTap,
+            onHighlightChanged: _setPressed,
+            borderRadius: BorderRadius.circular(SliveRadii.pill),
+            splashFactory: NoSplash.splashFactory,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            hoverColor: Colors.transparent,
+            focusColor: Colors.transparent,
+            overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+            child: AnimatedScale(
+              scale: _pressed ? 0.985 : 1,
+              duration: reduceMotion ? Duration.zero : SliveMotion.press,
               curve: SliveMotion.standard,
-              tween: Tween<double>(
-                begin: widget.selected ? 1 : 0,
-                end: widget.selected ? 1 : 0,
-              ),
-              child: label,
-              builder: (context, progress, child) {
-                return SizedBox(
-                  height: 36,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Opacity(
-                            opacity: progress,
-                            child: Transform.scale(
-                              scale: 0.94 + (0.06 * progress),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: widget.selectedFill,
-                                  borderRadius:
-                                      BorderRadius.circular(SliveRadii.pill),
-                                  border: Border.all(
-                                    color: widget.selectedBorder,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      widget.site.logo,
+                      width: 18,
+                      height: 18,
+                      filterQuality: FilterQuality.low,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        widget.site.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: foreground,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Transform.translate(
-                        offset: Offset(0, -0.5 * progress),
-                        child: child,
-                      ),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

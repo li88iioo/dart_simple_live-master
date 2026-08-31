@@ -32,8 +32,17 @@ class CategoryController extends GetxController
     for (var site in Sites.supportSites) {
       Get.put(CategoryListController(site), tag: site.id);
     }
+    tabController.addListener(_loadSelectedTab);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSelectedTab());
 
     super.onInit();
+  }
+
+  void _loadSelectedTab() {
+    if (isClosed || Sites.supportSites.isEmpty) return;
+    final index = tabController.index.clamp(0, Sites.supportSites.length - 1);
+    Get.find<CategoryListController>(tag: Sites.supportSites[index].id)
+        .ensureInitialLoad();
   }
 
   void refreshOrScrollTop() {
@@ -47,6 +56,7 @@ class CategoryController extends GetxController
   @override
   void onClose() {
     streamSubscription?.cancel();
+    tabController.removeListener(_loadSelectedTab);
     tabController.dispose();
     super.onClose();
   }

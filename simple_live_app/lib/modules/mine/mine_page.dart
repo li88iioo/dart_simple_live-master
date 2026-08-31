@@ -39,6 +39,129 @@ class MinePage extends StatelessWidget {
             34
         : 34.0;
 
+    final sections = <Widget>[
+      _buildProfileCard(context),
+      _MineSectionBlock(
+        label: '工具与数据',
+        child: _GlassSection(
+          children: [
+            _MineActionTile(
+              icon: Remix.history_line,
+              iconColor: _historyColor,
+              title: '观看记录',
+              subtitle: const _TileSubtitle('继续查看浏览过的直播间'),
+              onTap: () => Get.toNamed(RoutePath.kHistory),
+            ),
+            _MineActionTile(
+              icon: Icons.devices_rounded,
+              iconColor: _syncColor,
+              title: '局域网同步',
+              subtitle: const _TileSubtitle('在可信局域网内同步应用数据'),
+              onTap: () => Get.toNamed(RoutePath.kLocalSync),
+            ),
+            _MineActionTile(
+              icon: Remix.link,
+              iconColor: _linkColor,
+              title: '链接解析',
+              subtitle: const _TileSubtitle('解析支持平台的直播链接'),
+              onTap: () => Get.toNamed(RoutePath.kTools),
+            ),
+          ],
+        ),
+      ),
+      _MineSectionBlock(
+        label: '偏好设置',
+        child: _GlassSection(
+          children: [
+            _MineActionTile(
+              icon: Remix.moon_line,
+              iconColor: _appearanceColor,
+              title: '外观设置',
+              subtitle: const _AppearanceStatus(),
+              onTap: () => Get.toNamed(RoutePath.kAppstyleSetting),
+            ),
+            _MineActionTile(
+              icon: Remix.home_2_line,
+              iconColor: _homeColor,
+              title: '主页设置',
+              subtitle: const _TileSubtitle('调整平台顺序与默认首页'),
+              onTap: () => Get.toNamed(RoutePath.kSettingsIndexed),
+            ),
+            _MineActionTile(
+              icon: Remix.play_circle_line,
+              iconColor: _playerColor,
+              title: '直播设置',
+              subtitle: const _TileSubtitle('画质、播放与后台行为'),
+              onTap: () => Get.toNamed(RoutePath.kSettingsPlay),
+            ),
+            _MineActionTile(
+              icon: Remix.text,
+              iconColor: _danmakuColor,
+              title: '弹幕设置',
+              subtitle: const _TileSubtitle('字号、区域与礼物弹幕'),
+              onTap: () => Get.toNamed(RoutePath.kSettingsDanmu),
+            ),
+            _MineActionTile(
+              icon: Remix.timer_2_line,
+              iconColor: _timerColor,
+              title: '定时关闭',
+              subtitle: const _TileSubtitle('按计划停止当前播放'),
+              onTap: () => Get.toNamed(RoutePath.kSettingsAutoExit),
+            ),
+            _MineActionTile(
+              icon: Remix.apps_line,
+              iconColor: _otherColor,
+              title: '其他设置',
+              subtitle: const _TileSubtitle('日志、更新与实验选项'),
+              onTap: () => Get.toNamed(RoutePath.kSettingsOther),
+            ),
+            if (kDebugMode)
+              _MineActionTile(
+                icon: Remix.bug_line,
+                iconColor: _dangerColor,
+                title: '测试',
+                subtitle: const _TileSubtitle('SignalR 调试入口'),
+                onTap: _runDebugSignalR,
+              ),
+          ],
+        ),
+      ),
+      _MineSectionBlock(
+        label: '关于 Slive',
+        child: _GlassSection(
+          children: [
+            _MineActionTile(
+              icon: Remix.error_warning_line,
+              iconColor: _dangerColor,
+              title: '免责声明',
+              subtitle: const _TileSubtitle('使用前请了解服务边界'),
+              onTap: Utils.showStatement,
+            ),
+            _MineActionTile(
+              icon: Remix.github_line,
+              iconColor: _githubColor,
+              title: '开源主页',
+              subtitle: const _TileSubtitle('查看项目源码与发布信息'),
+              onTap: () {
+                launchUrlString(
+                  'https://github.com/li88iioo/dart_simple_live-master',
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+            ),
+            _MineActionTile(
+              icon: Remix.upload_2_line,
+              iconColor: _updateColor,
+              title: '检查更新',
+              subtitle: const _TileSubtitle('获取最新版本状态'),
+              trailingLabel: 'Ver ${Utils.packageInfo.version}',
+              onTap: () => Utils.checkUpdate(showMsg: true),
+            ),
+          ],
+        ),
+      ),
+    ];
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
           .copyWith(
@@ -50,141 +173,22 @@ class MinePage extends StatelessWidget {
         type: MaterialType.transparency,
         child: SafeArea(
           bottom: false,
-          child: ListView(
+          child: CustomScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(16, 10, 16, bottomPadding),
-            children: [
-              Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildProfileCard(context),
-                      const SizedBox(height: 22),
-                      _SectionLabel(label: '工具与数据'),
-                      const SizedBox(height: 8),
-                      _GlassSection(
-                        children: [
-                          _MineActionTile(
-                            icon: Remix.history_line,
-                            iconColor: _historyColor,
-                            title: '观看记录',
-                            subtitle: const _TileSubtitle('继续查看浏览过的直播间'),
-                            onTap: () => Get.toNamed(RoutePath.kHistory),
-                          ),
-                          _MineActionTile(
-                            icon: Icons.devices_rounded,
-                            iconColor: _syncColor,
-                            title: '局域网同步',
-                            subtitle: const _TileSubtitle('在可信局域网内同步应用数据'),
-                            onTap: () => Get.toNamed(RoutePath.kLocalSync),
-                          ),
-                          _MineActionTile(
-                            icon: Remix.link,
-                            iconColor: _linkColor,
-                            title: '链接解析',
-                            subtitle: const _TileSubtitle('解析支持平台的直播链接'),
-                            onTap: () => Get.toNamed(RoutePath.kTools),
-                          ),
-                        ],
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(16, 10, 16, bottomPadding),
+                sliver: SliverList.builder(
+                  itemCount: sections.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: EdgeInsets.only(top: index == 0 ? 0 : 22),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 760),
+                        child: sections[index],
                       ),
-                      const SizedBox(height: 22),
-                      _SectionLabel(label: '偏好设置'),
-                      const SizedBox(height: 8),
-                      _GlassSection(
-                        children: [
-                          _MineActionTile(
-                            icon: Remix.moon_line,
-                            iconColor: _appearanceColor,
-                            title: '外观设置',
-                            subtitle: const _AppearanceStatus(),
-                            onTap: () =>
-                                Get.toNamed(RoutePath.kAppstyleSetting),
-                          ),
-                          _MineActionTile(
-                            icon: Remix.home_2_line,
-                            iconColor: _homeColor,
-                            title: '主页设置',
-                            subtitle: const _TileSubtitle('调整平台顺序与默认首页'),
-                            onTap: () =>
-                                Get.toNamed(RoutePath.kSettingsIndexed),
-                          ),
-                          _MineActionTile(
-                            icon: Remix.play_circle_line,
-                            iconColor: _playerColor,
-                            title: '直播设置',
-                            subtitle: const _TileSubtitle('画质、播放与后台行为'),
-                            onTap: () => Get.toNamed(RoutePath.kSettingsPlay),
-                          ),
-                          _MineActionTile(
-                            icon: Remix.text,
-                            iconColor: _danmakuColor,
-                            title: '弹幕设置',
-                            subtitle: const _TileSubtitle('字号、区域与礼物弹幕'),
-                            onTap: () => Get.toNamed(RoutePath.kSettingsDanmu),
-                          ),
-                          _MineActionTile(
-                            icon: Remix.timer_2_line,
-                            iconColor: _timerColor,
-                            title: '定时关闭',
-                            subtitle: const _TileSubtitle('按计划停止当前播放'),
-                            onTap: () =>
-                                Get.toNamed(RoutePath.kSettingsAutoExit),
-                          ),
-                          _MineActionTile(
-                            icon: Remix.apps_line,
-                            iconColor: _otherColor,
-                            title: '其他设置',
-                            subtitle: const _TileSubtitle('日志、更新与实验选项'),
-                            onTap: () => Get.toNamed(RoutePath.kSettingsOther),
-                          ),
-                          if (kDebugMode)
-                            _MineActionTile(
-                              icon: Remix.bug_line,
-                              iconColor: _dangerColor,
-                              title: '测试',
-                              subtitle: const _TileSubtitle('SignalR 调试入口'),
-                              onTap: _runDebugSignalR,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 22),
-                      _SectionLabel(label: '关于 Slive'),
-                      const SizedBox(height: 8),
-                      _GlassSection(
-                        children: [
-                          _MineActionTile(
-                            icon: Remix.error_warning_line,
-                            iconColor: _dangerColor,
-                            title: '免责声明',
-                            subtitle: const _TileSubtitle('使用前请了解服务边界'),
-                            onTap: Utils.showStatement,
-                          ),
-                          _MineActionTile(
-                            icon: Remix.github_line,
-                            iconColor: _githubColor,
-                            title: '开源主页',
-                            subtitle: const _TileSubtitle('查看项目源码与发布信息'),
-                            onTap: () {
-                              launchUrlString(
-                                'https://github.com/li88iioo/dart_simple_live-master',
-                                mode: LaunchMode.externalApplication,
-                              );
-                            },
-                          ),
-                          _MineActionTile(
-                            icon: Remix.upload_2_line,
-                            iconColor: _updateColor,
-                            title: '检查更新',
-                            subtitle: const _TileSubtitle('获取最新版本状态'),
-                            trailingLabel: 'Ver ${Utils.packageInfo.version}',
-                            onTap: () => Utils.checkUpdate(showMsg: true),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -287,6 +291,25 @@ class MinePage extends StatelessWidget {
     await signalRService.connect();
     final room = await signalRService.createRoom();
     Log.logPrint(room);
+  }
+}
+
+class _MineSectionBlock extends StatelessWidget {
+  const _MineSectionBlock({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionLabel(label: label),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
   }
 }
 

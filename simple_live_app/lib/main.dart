@@ -28,7 +28,6 @@ import 'package:simple_live_app/modules/settings/appstyle_settings/appstyle_sett
 import 'package:simple_live_app/routes/app_analytics_observer.dart';
 import 'package:simple_live_app/routes/app_pages.dart';
 import 'package:simple_live_app/routes/route_path.dart';
-import 'package:simple_live_app/routes/slive_route_transition.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/platform_service.dart';
@@ -196,9 +195,12 @@ class MyApp extends StatelessWidget {
                 .values[Get.find<AppSettingsController>().themeMode.value],
             initialRoute: RoutePath.kIndex,
             getPages: AppPages.routes,
-            customTransition: SliveRouteTransition(),
+            // 普通页面交给 Flutter 当前平台的原生转场实现。Android 使用
+            // PredictiveBackPageTransitionsBuilder，并在合适时动画化页面快照，
+            // 避免每一帧重新栅格化整棵设置页组件树。
+            defaultTransition: Transition.native,
             transitionDuration: SliveMotion.route,
-            popGesture: true,
+            popGesture: Platform.isIOS || Platform.isMacOS,
             //国际化
             locale: const Locale("zh", "CN"),
             localizationsDelegates: const [

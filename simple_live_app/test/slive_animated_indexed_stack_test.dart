@@ -45,4 +45,40 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('主导航可关闭整页位移动画并保持单页绘制', (tester) async {
+    final selectedIndex = ValueNotifier<int>(0);
+    addTearDown(selectedIndex.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<int>(
+          valueListenable: selectedIndex,
+          builder: (context, index, child) {
+            return SliveAnimatedIndexedStack(
+              index: index,
+              transitionDistance: 0,
+              children: const [
+                ColoredBox(color: Colors.red, child: Text('首页')),
+                ColoredBox(color: Colors.blue, child: Text('关注')),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+
+    selectedIndex.value = 1;
+    await tester.pump();
+
+    expect(find.text('首页'), findsNothing);
+    expect(find.text('关注'), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('slive-indexed-page-transition'),
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

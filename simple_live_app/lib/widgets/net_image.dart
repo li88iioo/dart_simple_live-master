@@ -10,6 +10,7 @@ class NetImage extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.borderRadius = 0,
+    this.maxDecodeDensity = _maxDecodeDensity,
     super.key,
   });
 
@@ -22,6 +23,7 @@ class NetImage extends StatelessWidget {
   final double? height;
   final BoxFit? fit;
   final double borderRadius;
+  final double maxDecodeDensity;
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +39,18 @@ class NetImage extends StatelessWidget {
         final decodeOnWidth = logicalWidth != null &&
             (logicalHeight == null || logicalWidth >= logicalHeight);
         final cacheWidth = decodeOnWidth
-            ? resolveNetImageCacheExtent(logicalWidth, density)
+            ? resolveNetImageCacheExtent(
+                logicalWidth,
+                density,
+                maxDensity: maxDecodeDensity,
+              )
             : null;
         final cacheHeight = !decodeOnWidth && logicalHeight != null
-            ? resolveNetImageCacheExtent(logicalHeight, density)
+            ? resolveNetImageCacheExtent(
+                logicalHeight,
+                density,
+                maxDensity: maxDecodeDensity,
+              )
             : null;
 
         Widget image;
@@ -91,6 +101,41 @@ class NetImage extends StatelessWidget {
     );
   }
 
+  /// 在列表空闲阶段按与实际卡片一致的解码尺寸预热网络缩略图。
+  ///
+  /// 复用 extended_image 的磁盘缓存与 Flutter ImageCache；失败静默忽略，
+  /// 不影响正常卡片自己的错误占位逻辑。
+  static Future<void> warmUpNetworkImage(
+    BuildContext context,
+    String picUrl, {
+    required double logicalWidth,
+  }) async {
+    final normalizedUrl = picUrl.startsWith('//') ? 'https:$picUrl' : picUrl;
+    if (normalizedUrl.isEmpty || logicalWidth <= 0 || !context.mounted) return;
+
+    final cacheWidth = resolveNetImageCacheExtent(
+      logicalWidth,
+      MediaQuery.devicePixelRatioOf(context),
+    );
+    final provider = ExtendedResizeImage.resizeIfNeeded(
+      provider: ExtendedNetworkImageProvider(
+        normalizedUrl,
+        cache: true,
+        printError: false,
+      ),
+      cacheWidth: cacheWidth,
+    );
+    try {
+      await precacheImage(
+        provider,
+        context,
+        onError: (_, __) {},
+      );
+    } catch (_) {
+      // 网络失败由真实卡片加载状态接管，预热不向用户显示错误。
+    }
+  }
+
   static double? _finiteExtent(double? value) {
     if (value == null || !value.isFinite || value <= 0) return null;
     return value;
@@ -111,17 +156,21 @@ class NetImage extends StatelessWidget {
   @visibleForTesting
   static int? resolveNetImageCacheExtent(
     double? logicalExtent,
-    double devicePixelRatio,
-  ) {
+    double devicePixelRatio, {
+    double maxDensity = _maxDecodeDensity,
+  }) {
     if (logicalExtent == null ||
         !logicalExtent.isFinite ||
         logicalExtent <= 0 ||
         !devicePixelRatio.isFinite ||
-        devicePixelRatio <= 0) {
+        devicePixelRatio <= 0 ||
+        !maxDensity.isFinite ||
+        maxDensity <= 0) {
       return null;
     }
-    final density = devicePixelRatio.clamp(1, _maxDecodeDensity);
-    final requestedPixels = logicalExtent * density * 1.2;
+    final densityLimit = maxDensity.clamp(1.0, _maxDecodeDensity);
+    final density = devicePixelRatio.clamp(1.0, densityLimit);
+    final requestedPixels = logicalExtent * density;
     final bucketed = (requestedPixels / _decodeBucket).ceil() * _decodeBucket;
     return math.min(bucketed, _maxDecodeExtent);
   }

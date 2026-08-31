@@ -93,7 +93,7 @@ class BasePageController<T> extends BaseController {
       }
       // 赋值数据
       if (isFirstPage) {
-        list.assignAll(result);
+        list.value = List<T>.of(result);
       } else {
         list.addAll(result);
       }

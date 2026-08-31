@@ -97,7 +97,27 @@ void main() {
     await tester.pump();
 
     key.currentState!.select(1);
+    key.currentState!.rebuildParent();
+
+    var stack = tester.widget<SliveAnimatedIndexedStack>(
+      find.byType(SliveAnimatedIndexedStack),
+    );
+    expect(stack.index, 0);
+    expect(stack.prebuildMountedChildren, isTrue);
+
+    // 第一帧只提交平台胶囊反馈，即使父级同时重建也不能提前切重型内容。
     await tester.pump();
+    stack = tester.widget<SliveAnimatedIndexedStack>(
+      find.byType(SliveAnimatedIndexedStack),
+    );
+    expect(stack.index, 0);
+
+    // 下一帧再显示目标列表。
+    await tester.pump();
+    stack = tester.widget<SliveAnimatedIndexedStack>(
+      find.byType(SliveAnimatedIndexedStack),
+    );
+    expect(stack.index, 1);
 
     final activeLayoutCount = secondMetrics.layoutCount;
     expect(activeLayoutCount, greaterThan(0));
@@ -109,6 +129,61 @@ void main() {
     expect(secondMetrics.layoutCount, activeLayoutCount);
     expect(firstMetrics.disposeCount, 0);
     expect(secondMetrics.initCount, 1);
+  });
+
+  testWidgets('预构建模式保留隐藏页状态并停止其 ticker 与绘制', (tester) async {
+    final selectedIndex = ValueNotifier<int>(0);
+    final firstMetrics = _PageMetrics();
+    final secondMetrics = _PageMetrics();
+    addTearDown(selectedIndex.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<int>(
+          valueListenable: selectedIndex,
+          builder: (context, index, child) {
+            return SliveAnimatedIndexedStack(
+              index: index,
+              transitionDistance: 0,
+              prebuildMountedChildren: true,
+              children: [
+                _TickerLayoutProbePage(
+                  label: '预热首页',
+                  metrics: firstMetrics,
+                ),
+                _TickerLayoutProbePage(
+                  label: '预热我的',
+                  metrics: secondMetrics,
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(firstMetrics.initCount, 1);
+    expect(secondMetrics.initCount, 1);
+    expect(find.text('预热首页'), findsOneWidget);
+    expect(find.text('预热我的'), findsNothing);
+    expect(find.text('预热我的', skipOffstage: false), findsOneWidget);
+
+    final hiddenTickCount = secondMetrics.tickCount;
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(secondMetrics.tickCount, hiddenTickCount);
+
+    selectedIndex.value = 1;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(find.text('预热首页'), findsNothing);
+    expect(find.text('预热我的'), findsOneWidget);
+    expect(firstMetrics.initCount, 1);
+    expect(secondMetrics.initCount, 1);
+    expect(firstMetrics.disposeCount, 0);
+    expect(secondMetrics.disposeCount, 0);
+    expect(secondMetrics.tickCount, greaterThan(hiddenTickCount));
   });
 
   testWidgets('页面容器禁用整页透明层和自动大纹理 RepaintBoundary', (tester) async {
@@ -244,6 +319,8 @@ class _TabBridgeHarnessState extends State<_TabBridgeHarness>
     vsync: this,
     animationDuration: const Duration(milliseconds: 150),
   );
+
+  void rebuildParent() => setState(() {});
 
   void select(int index) {
     _controller.animateTo(

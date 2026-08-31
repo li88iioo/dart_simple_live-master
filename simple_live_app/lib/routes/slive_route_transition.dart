@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:simple_live_app/app/theme/slive_theme.dart';
 
-/// Slive 的轻量页面过渡。
+/// 直播间专用的轻量顶层页面转场。
 ///
-/// 页面始终保持不透明，只用固定像素的水平 transform 完成推进/返回。
-/// 这样不会像全屏 FadeTransition 那样为玻璃页面创建大面积透明合成层，
-/// 也不会在返回时把前后两页文字叠在一起形成残影。固定像素位移还能避免
-/// PC 宽屏下按页面宽度计算位移过大、看起来迟钝。
+/// 普通页面使用 Flutter 平台原生转场；播放器页面包含持续更新的原生纹理，
+/// 因此不制作整页快照，也不通过 [secondaryAnimation] 移动下层页面。进入时仅
+/// 当前直播间从右侧滑入，返回时立即向右退出，首页始终保持静止。
 class SliveRouteTransition extends CustomTransition {
-  static const double _incomingDistance = 18;
-  static const double _coveredDistance = -5;
+  static const Curve _enterCurve = Curves.easeOutCubic;
+  static const Curve _exitCurve = Curves.easeInCubic;
 
   @override
   Widget buildTransition(
@@ -22,45 +20,29 @@ class SliveRouteTransition extends CustomTransition {
     Widget child,
   ) {
     final routeSurface = ColoredBox(
-      color: Theme.of(context).scaffoldBackgroundColor,
+      color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 1),
       child: child,
     );
-    if (MediaQuery.disableAnimationsOf(context)) return routeSurface;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return routeSurface;
+    }
 
-    final primaryMotion = CurvedAnimation(
-      parent: animation,
-      curve: curve ?? SliveMotion.standard,
-      // reverse 时动画值从 1 向 0 变化。easeInCubic 在靠近 1 的区间
-      // 立即产生可见位移，避免点击返回后先停顿一帧。
-      reverseCurve: Curves.easeInCubic,
-    );
-    final secondaryMotion = CurvedAnimation(
-      parent: secondaryAnimation,
-      curve: SliveMotion.standard,
-      reverseCurve: Curves.easeInCubic,
-    );
-    final routeOffset = Tween<double>(
-      begin: _incomingDistance,
-      end: 0,
-    ).animate(primaryMotion);
-    final coveredRouteOffset = Tween<double>(
-      begin: 0,
-      end: _coveredDistance,
-    ).animate(secondaryMotion);
-
-    return AnimatedBuilder(
-      animation: secondaryMotion,
-      child: AnimatedBuilder(
-        animation: primaryMotion,
-        child: routeSurface,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(routeOffset.value, 0),
-          child: child,
-        ),
+    final position = Tween<Offset>(
+      begin: const Offset(1, 0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: animation,
+        curve: _enterCurve,
+        reverseCurve: _exitCurve,
       ),
-      builder: (context, child) => Transform.translate(
-        offset: Offset(coveredRouteOffset.value, 0),
-        child: child,
+    );
+
+    return ClipRect(
+      child: SlideTransition(
+        position: position,
+        transformHitTests: false,
+        child: routeSurface,
       ),
     );
   }
