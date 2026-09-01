@@ -321,10 +321,10 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
         setLandscapeOrientation();
       }
     } else {
-      // todo: animation isn't smooth...
-      bool isMaximized = await windowManager.isMaximized();
-      if (isMaximized) {
-        await windowManager.setFullScreen(true);
+      WindowService.instance.setFullScreenState(true);
+      // Linux 原生标题栏由根窗口壳永久隐藏；只在其它桌面平台
+      // 沿用原有标题栏切换，避免退出全屏时出现双标题栏。
+      if (!Platform.isLinux && await windowManager.isMaximized()) {
         await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
       }
       await windowManager.setFullScreen(true);
@@ -343,12 +343,12 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       setPortraitOrientation();
       _orientationChanged = false;
     } else {
-      bool isMaximized = await windowManager.isMaximized();
-      if (isMaximized) {
-        await windowManager.setFullScreen(false);
+      WindowService.instance.setFullScreenState(false);
+      final isMaximized = await windowManager.isMaximized();
+      await windowManager.setFullScreen(false);
+      if (!Platform.isLinux && isMaximized) {
         await windowManager.setTitleBarStyle(TitleBarStyle.normal);
       }
-      windowManager.setFullScreen(false);
     }
     fullScreenState.value = false;
 
@@ -363,13 +363,15 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     if (!(Platform.isAndroid || Platform.isIOS)) {
       fullScreenState.value = true;
       smallWindowState.value = true;
-      WindowService.instance.isPIP = smallWindowState.value;
+      WindowService.instance.setPIP(smallWindowState.value);
 
       // 读取窗口大小
       _lastWindowSize = await windowManager.getSize();
       _lastWindowPosition = await windowManager.getPosition();
 
-      windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+      if (!Platform.isLinux) {
+        windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+      }
       // 获取视频窗口大小
       var width = player.state.width ?? 16;
       var height = player.state.height ?? 9;
@@ -392,8 +394,10 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     if (!(Platform.isAndroid || Platform.isIOS)) {
       fullScreenState.value = false;
       smallWindowState.value = false;
-      WindowService.instance.isPIP = smallWindowState.value;
-      windowManager.setTitleBarStyle(TitleBarStyle.normal);
+      WindowService.instance.setPIP(smallWindowState.value);
+      if (!Platform.isLinux) {
+        windowManager.setTitleBarStyle(TitleBarStyle.normal);
+      }
       windowManager.setSize(_lastWindowSize!);
       windowManager.setPosition(_lastWindowPosition!);
       windowManager.setAlwaysOnTop(false);

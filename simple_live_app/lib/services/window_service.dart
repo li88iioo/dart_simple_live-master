@@ -8,23 +8,39 @@ import 'package:window_manager/window_manager.dart';
 class WindowService extends GetxService implements WindowListener {
   static WindowService get instance => Get.find<WindowService>();
 
-  bool isPIP = false;
+  final RxBool isPIP = false.obs;
+  final RxBool isMaximized = false.obs;
+  final RxBool isFullScreen = false.obs;
+  final RxBool isFocused = true.obs;
 
   WindowService() {
     windowManager.addListener(this);
   }
 
+  @override
+  void onClose() {
+    windowManager.removeListener(this);
+    super.onClose();
+  }
+
   Future<void> init() async {
-    await resize();
-    WindowOptions windowOptions = WindowOptions(
-      minimumSize: Size(280, 280),
+    final windowOptions = WindowOptions(
+      minimumSize: const Size(280, 280),
       center: false,
-      title: "Slive",
+      title: 'Slive',
+      // Linux 使用应用内标题栏；原生装饰始终保持隐藏，避免全屏/小窗
+      // 往返时出现双标题栏和内容区域跳动。
+      titleBarStyle:
+          Platform.isLinux ? TitleBarStyle.hidden : TitleBarStyle.normal,
+      windowButtonVisibility: !Platform.isLinux,
     );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
+
+    await windowManager.waitUntilReadyToShow(windowOptions);
+    await resize();
+    await _syncWindowState();
+    await windowManager.show();
+    await windowManager.focus();
+    isFocused.value = true;
   }
 
   Future<void> resize() async {
@@ -37,11 +53,35 @@ class WindowService extends GetxService implements WindowListener {
         .getValue(LocalStorageService.kWindowX, 320.0);
     final y = LocalStorageService.instance
         .getValue(LocalStorageService.kWindowY, 180.0);
-    windowManager.setBounds(Rect.fromLTWH(x, y, width, height));
+    await windowManager.setBounds(Rect.fromLTWH(x, y, width, height));
+  }
+
+  Future<void> toggleMaximize() async {
+    if (await windowManager.isMaximized()) {
+      await windowManager.unmaximize();
+    } else {
+      await windowManager.maximize();
+    }
+    isMaximized.value = await windowManager.isMaximized();
+  }
+
+  void setPIP(bool value) {
+    isPIP.value = value;
+  }
+
+  void setFullScreenState(bool value) {
+    isFullScreen.value = value;
+  }
+
+  Future<void> _syncWindowState() async {
+    isMaximized.value = await windowManager.isMaximized();
+    isFullScreen.value = await windowManager.isFullScreen();
   }
 
   @override
-  void onWindowBlur() {}
+  void onWindowBlur() {
+    isFocused.value = false;
+  }
 
   @override
   void onWindowClose() {
@@ -54,29 +94,39 @@ class WindowService extends GetxService implements WindowListener {
   void onWindowDocked() {}
 
   @override
-  void onWindowEnterFullScreen() {}
+  void onWindowEnterFullScreen() {
+    isFullScreen.value = true;
+  }
 
   @override
   void onWindowEvent(String eventName) {}
 
   @override
-  void onWindowFocus() {}
+  void onWindowFocus() {
+    isFocused.value = true;
+  }
 
   @override
-  void onWindowLeaveFullScreen() {}
+  void onWindowLeaveFullScreen() {
+    isFullScreen.value = false;
+  }
 
   @override
-  void onWindowMaximize() {}
+  void onWindowMaximize() {
+    isMaximized.value = true;
+  }
 
   @override
-  void onWindowMinimize() {}
+  void onWindowMinimize() {
+    isFocused.value = false;
+  }
 
   @override
   Future<void> onWindowMove() async {}
 
   @override
   Future<void> onWindowMoved() async {
-    if (!isPIP) {
+    if (!isPIP.value) {
       final bounds = await windowManager.getBounds();
       _saveBounds(bounds);
     }
@@ -87,20 +137,24 @@ class WindowService extends GetxService implements WindowListener {
 
   @override
   Future<void> onWindowResized() async {
-    if (!isPIP) {
+    if (!isPIP.value) {
       final bounds = await windowManager.getBounds();
       _saveBounds(bounds);
     }
   }
 
   @override
-  void onWindowRestore() {}
+  void onWindowRestore() {
+    isFocused.value = true;
+  }
 
   @override
   void onWindowUndocked() {}
 
   @override
-  void onWindowUnmaximize() {}
+  void onWindowUnmaximize() {
+    isMaximized.value = false;
+  }
 
   void _saveBounds(Rect bounds) {
     LocalStorageService.instance

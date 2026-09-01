@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:simple_live_app/modules/live_room/chat/huya_chat_badge_style.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
 @immutable
@@ -43,48 +44,8 @@ class HuyaFansBadgeChip extends StatelessWidget {
   final HuyaFansBadge badge;
   final double fontSize;
 
-  _HuyaFansBadgePalette _paletteForLevel() {
-    if (badge.level >= 26) {
-      return const _HuyaFansBadgePalette(
-        level: Color(0xFFB64C3D),
-        nameStart: Color(0xFFD96948),
-        nameEnd: Color(0xFFE58B55),
-      );
-    }
-    if (badge.level >= 21) {
-      return const _HuyaFansBadgePalette(
-        level: Color(0xFF9A5A32),
-        nameStart: Color(0xFFC17B3E),
-        nameEnd: Color(0xFFD9A259),
-      );
-    }
-    if (badge.level >= 16) {
-      return const _HuyaFansBadgePalette(
-        level: Color(0xFF9E496F),
-        nameStart: Color(0xFFBE5F8A),
-        nameEnd: Color(0xFFD77BA2),
-      );
-    }
-    if (badge.level >= 11) {
-      return const _HuyaFansBadgePalette(
-        level: Color(0xFF6556A7),
-        nameStart: Color(0xFF7B69BE),
-        nameEnd: Color(0xFF9A87D2),
-      );
-    }
-    if (badge.level >= 6) {
-      return const _HuyaFansBadgePalette(
-        level: Color(0xFF367F8A),
-        nameStart: Color(0xFF4697A0),
-        nameEnd: Color(0xFF69B2B8),
-      );
-    }
-    return const _HuyaFansBadgePalette(
-      level: Color(0xFF416E9E),
-      nameStart: Color(0xFF5685B5),
-      nameEnd: Color(0xFF78A1C8),
-    );
-  }
+  HuyaChatBadgePalette _paletteForLevel() =>
+      huyaChatBadgePaletteForTier(huyaFansBadgeTier(badge.level));
 
   double _resolveWidth(BuildContext context, double labelFontSize) {
     final painter = TextPainter(
@@ -107,8 +68,8 @@ class HuyaFansBadgeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = _paletteForLevel();
-    final height = (fontSize + 4).clamp(18.0, 20.0).toDouble();
-    final labelFontSize = (fontSize - 3).clamp(9.5, 11.0).toDouble();
+    final height = HuyaChatBadgeStyle.height(fontSize);
+    final labelFontSize = HuyaChatBadgeStyle.labelFontSize(fontSize);
     final levelFontSize = (labelFontSize - 0.4).clamp(9.0, 10.5).toDouble();
     final levelWidth = badge.level >= 10 ? 27.0 : 23.0;
     final width = _resolveWidth(context, labelFontSize);
@@ -120,7 +81,7 @@ class HuyaFansBadgeChip extends StatelessWidget {
         width: width,
         height: height,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(HuyaChatBadgeStyle.radius),
           clipBehavior: Clip.hardEdge,
           child: CustomPaint(
             key: const ValueKey('huya-fans-badge-paint'),
@@ -177,37 +138,25 @@ class HuyaFansBadgeChip extends StatelessWidget {
 }
 
 @immutable
-class _HuyaFansBadgePalette {
-  const _HuyaFansBadgePalette({
-    required this.level,
-    required this.nameStart,
-    required this.nameEnd,
-  });
-
-  final Color level;
-  final Color nameStart;
-  final Color nameEnd;
-}
-
 class _HuyaFansBadgePainter extends CustomPainter {
   const _HuyaFansBadgePainter({
     required this.palette,
     required this.levelWidth,
   });
 
-  final _HuyaFansBadgePalette palette;
+  final HuyaChatBadgePalette palette;
   final double levelWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
     final bounds = Offset.zero & size;
-    final radius = Radius.circular(4);
+    const radius = Radius.circular(HuyaChatBadgeStyle.radius);
     final outer = RRect.fromRectAndRadius(bounds, radius);
     canvas.drawRRect(
       outer,
       Paint()
         ..shader = LinearGradient(
-          colors: [palette.nameStart, palette.nameEnd],
+          colors: [palette.bodyStart, palette.bodyEnd],
         ).createShader(bounds),
     );
 
@@ -217,11 +166,11 @@ class _HuyaFansBadgePainter extends CustomPainter {
       ..lineTo(levelWidth, size.height)
       ..lineTo(0, size.height)
       ..close();
-    canvas.drawPath(levelPath, Paint()..color = palette.level);
+    canvas.drawPath(levelPath, Paint()..color = palette.leading);
 
     final highlight = Paint()
       ..color = Colors.white.withValues(alpha: 0.22)
-      ..strokeWidth = 0.55
+      ..strokeWidth = HuyaChatBadgeStyle.outlineWidth
       ..style = PaintingStyle.stroke;
     canvas.drawRRect(
       RRect.fromRectAndRadius(

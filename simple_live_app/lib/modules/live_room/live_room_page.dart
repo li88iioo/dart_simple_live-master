@@ -14,7 +14,7 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
-import 'package:simple_live_app/modules/live_room/chat/huya_fans_badge.dart';
+import 'package:simple_live_app/modules/live_room/chat/huya_chat_identity_spans.dart';
 import 'package:simple_live_app/modules/live_room/chat/huya_noble_badge.dart';
 import 'package:simple_live_app/modules/live_room/gift/huya_gift_danmaku_overlay.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
@@ -194,7 +194,9 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             child: _buildPlayerFrame(context),
           ),
         ),
-        buildUserProfile(context),
+        // 竖屏下即使主播卡与控制栏都已自动隐藏，也保留一段稳定呼吸区，
+        // 避免首条弹幕视觉上直接贴入播放器圆角边缘。横屏双栏不使用该间距。
+        const SizedBox(height: 10),
         buildMessageArea(context),
       ],
     );
@@ -214,8 +216,11 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   width: 320,
                   child: Column(
                     children: [
-                      buildUserProfile(context, horizontalMargin: 0),
-                      buildMessageArea(context, horizontalPadding: 0),
+                      buildMessageArea(
+                        context,
+                        horizontalPadding: 0,
+                        respectLeftSafeArea: false,
+                      ),
                     ],
                   ),
                 ),
@@ -558,13 +563,22 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   Widget buildMessageArea(
     BuildContext context, {
     double horizontalPadding = 12,
+    bool respectLeftSafeArea = true,
   }) {
     return Expanded(
       child: SafeArea(
         top: false,
+        // 横屏双栏时聊天区位于屏幕右侧，设备左侧挖孔已由播放器一侧
+        // 承接；若在这里再次应用全局左安全区，会把整列弹幕额外右推。
+        // 右侧与底部安全区仍保留，以兼容反向横屏和手势导航区域。
+        left: respectLeftSafeArea,
         child: _LiveRoomMessageArea(
           controller: controller,
           horizontalPadding: horizontalPadding,
+          profileBuilder: () => buildUserProfile(
+            context,
+            horizontalMargin: horizontalPadding,
+          ),
           messageItemBuilder: buildMessageItem,
           superChatsBuilder: buildSuperChats,
           followListBuilder: buildFollowList,
@@ -632,20 +646,13 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         );
       }
 
-      final fansBadge = HuyaFansBadge.fromMessage(message);
       final content = Text.rich(
         TextSpan(
           children: [
-            if (fansBadge != null) ...[
-              WidgetSpan(
-                alignment: PlaceholderAlignment.middle,
-                child: HuyaFansBadgeChip(
-                  badge: fansBadge,
-                  fontSize: fontSize,
-                ),
-              ),
-              const WidgetSpan(child: SizedBox(width: 5)),
-            ],
+            ...buildHuyaChatIdentitySpans(
+              message: message,
+              fontSize: fontSize,
+            ),
             TextSpan(
               text: "${message.userName}：",
               style: TextStyle(
@@ -1209,6 +1216,7 @@ class _LiveRoomMessageArea extends StatefulWidget {
   const _LiveRoomMessageArea({
     required this.controller,
     required this.horizontalPadding,
+    required this.profileBuilder,
     required this.messageItemBuilder,
     required this.superChatsBuilder,
     required this.followListBuilder,
@@ -1218,6 +1226,7 @@ class _LiveRoomMessageArea extends StatefulWidget {
 
   final LiveRoomController controller;
   final double horizontalPadding;
+  final Widget Function() profileBuilder;
   final Widget Function(BuildContext context, LiveMessage message)
       messageItemBuilder;
   final Widget Function() superChatsBuilder;
@@ -1361,62 +1370,174 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
   Duration get _visibilityDuration =>
       _disableAnimations ? Duration.zero : SliveMotion.selection;
 
+  Widget _buildAutoHidingProfile() {
+    final visible = _activeIndex == 0 && _tabsVisible;
+    return IgnorePointer(
+      ignoring: !visible,
+      child: ExcludeSemantics(
+        excluding: !visible,
+        child: AnimatedCrossFade(
+          firstChild: RepaintBoundary(child: widget.profileBuilder()),
+          secondChild: const SizedBox(width: double.infinity),
+          crossFadeState:
+              visible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+          duration: _visibilityDuration,
+          reverseDuration: _visibilityDuration,
+          firstCurve: SliveMotion.standard,
+          secondCurve: SliveMotion.standard,
+          sizeCurve: SliveMotion.standard,
+          alignment: Alignment.topCenter,
+          excludeBottomFocus: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomOcclusionMask(BuildContext context) {
+    final colors = context.sliveColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bottomColor = Color.lerp(
+      colors.backgroundEnd,
+      colors.glassBase,
+      isDark ? 0.10 : 0.20,
+    )!;
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        child: RepaintBoundary(
+          child: SizedBox(
+            height: 96,
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                // Dock 出现时扩大遮挡范围，避免半透明玻璃下方仍能看到
+                // 被裁切的弹幕。Dock 隐藏只收起这一层，不影响永久边缘遮罩。
+                Positioned.fill(
+                  child: AnimatedOpacity(
+                    key: const ValueKey('live-room-bottom-dock-mask'),
+                    duration: _visibilityDuration,
+                    curve: SliveMotion.standard,
+                    opacity: _bottomActionsVisible ? 1 : 0,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: const [0, 0.46, 1],
+                          colors: [
+                            bottomColor.withValues(alpha: 0),
+                            bottomColor.withValues(
+                              alpha: isDark ? 0.70 : 0.78,
+                            ),
+                            bottomColor,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // 这层始终保留。新弹幕追底或 Dock 刚隐藏时，列表项会从
+                // 可视区域底边逐步进入；用短距离柔和遮罩隐藏不足一行的
+                // “小冒头”，避免它贴着系统手势导航条闪一下。
+                SizedBox(
+                  key: const ValueKey('live-room-bottom-edge-mask'),
+                  height: 42,
+                  width: double.infinity,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: const [0, 0.34, 0.72, 1],
+                        colors: [
+                          bottomColor.withValues(alpha: 0),
+                          bottomColor.withValues(alpha: isDark ? 0.16 : 0.20),
+                          bottomColor.withValues(alpha: isDark ? 0.88 : 0.92),
+                          bottomColor,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _handlePointerDown,
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
         children: [
-          LiveRoomTabViewport(
-            index: _activeIndex,
-            duration: _tabSwitchDuration,
-            children: _tabPages,
-          ),
-          Positioned(
-            top: 4,
-            left: widget.horizontalPadding,
-            right: widget.horizontalPadding,
-            child: IgnorePointer(
-              ignoring: !_tabsVisible,
-              child: AnimatedSlide(
-                duration: _visibilityDuration,
-                curve: SliveMotion.standard,
-                offset: _tabsVisible ? Offset.zero : const Offset(0, -0.28),
-                child: AnimatedOpacity(
-                  duration: _visibilityDuration,
-                  curve: SliveMotion.standard,
-                  opacity: _tabsVisible ? 1 : 0,
-                  child: RepaintBoundary(child: _buildTabBar(context)),
+          _buildAutoHidingProfile(),
+          Expanded(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                LiveRoomTabViewport(
+                  index: _activeIndex,
+                  duration: _tabSwitchDuration,
+                  children: _tabPages,
                 ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              ignoring: !_bottomActionsVisible,
-              child: ExcludeSemantics(
-                excluding: !_bottomActionsVisible,
-                child: AnimatedSlide(
-                  duration: _visibilityDuration,
-                  curve: SliveMotion.standard,
-                  offset: _bottomActionsVisible
-                      ? Offset.zero
-                      : const Offset(0, 1.10),
-                  child: AnimatedOpacity(
-                    duration: _visibilityDuration,
-                    curve: SliveMotion.standard,
-                    opacity: _bottomActionsVisible ? 1 : 0,
-                    child: RepaintBoundary(
-                      child: widget.bottomActionsBuilder(),
+                Positioned(
+                  top: 4,
+                  left: widget.horizontalPadding,
+                  right: widget.horizontalPadding,
+                  child: IgnorePointer(
+                    ignoring: !_tabsVisible,
+                    child: AnimatedSlide(
+                      duration: _visibilityDuration,
+                      curve: SliveMotion.standard,
+                      offset:
+                          _tabsVisible ? Offset.zero : const Offset(0, -0.28),
+                      child: AnimatedOpacity(
+                        duration: _visibilityDuration,
+                        curve: SliveMotion.standard,
+                        opacity: _tabsVisible ? 1 : 0,
+                        child: RepaintBoundary(child: _buildTabBar(context)),
+                      ),
                     ),
                   ),
                 ),
-              ),
+                // 底栏初次出现和自动滚动追底时，列表仍会在半透明 Dock
+                // 下方绘制。用同节奏的轻量渐隐层遮住被裁切的半行文字，
+                // 避免系统导航栏上方短暂“冒头”，同时不改变列表尺寸和滚动位置。
+                _buildBottomOcclusionMask(context),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    ignoring: !_bottomActionsVisible,
+                    child: ExcludeSemantics(
+                      excluding: !_bottomActionsVisible,
+                      child: AnimatedSlide(
+                        duration: _visibilityDuration,
+                        curve: SliveMotion.standard,
+                        offset: _bottomActionsVisible
+                            ? Offset.zero
+                            : const Offset(0, 1.10),
+                        child: AnimatedOpacity(
+                          duration: _visibilityDuration,
+                          curve: SliveMotion.standard,
+                          opacity: _bottomActionsVisible ? 1 : 0,
+                          child: RepaintBoundary(
+                            child: widget.bottomActionsBuilder(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

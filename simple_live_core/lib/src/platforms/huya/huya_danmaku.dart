@@ -28,11 +28,12 @@ class HuyaDanmakuArgs {
 }
 
 class HuyaDanmaku implements LiveDanmaku {
-  static const Duration _giftCatalogWait = Duration(seconds: 3);
+  static const Duration _giftCatalogWait = Duration(milliseconds: 1200);
   static const int _maxPendingGifts = 100;
   static const int _giftDuplicateTtlMs = 2 * 60 * 1000;
   static const int _giftDuplicateCleanupInterval = 128;
   static const int _maxGiftDuplicateEntries = 4096;
+  static const int _nobleDecorationAppId = 10200;
   static const int _fansBadgeDecorationAppId = 10400;
 
   final Duration registerAckTimeout;
@@ -368,8 +369,8 @@ class HuyaDanmaku implements LiveDanmaku {
       final response = packet.get("tRsp", HYGetPropsListRsp());
       final catalog = <int, HYPropsItem>{};
       for (final item in response.items) {
-        final name = item.propsName.trim();
-        if (item.propsId > 0 && name.isNotEmpty) {
+        // 图片、价格和效果资源不依赖礼物名；名称为空的合法条目也必须保留。
+        if (item.propsId > 0) {
           catalog[item.propsId] = item;
         }
       }
@@ -396,7 +397,9 @@ class HuyaDanmaku implements LiveDanmaku {
     required String groupId,
     required int messageId,
   }) {
-    if (!_isExpectedGroup(groupId)) return;
+    final isGiftUri =
+        _isGiftTransactionUri(uri) || uri == HuyaPushUri.bigGiftEffect;
+    if (!_isExpectedGroup(groupId) && !(isGiftUri && groupId.isEmpty)) return;
 
     switch (uri) {
       case HuyaPushUri.chat:
@@ -406,7 +409,18 @@ class HuyaDanmaku implements LiveDanmaku {
         _handleOnlineCount(msg);
         break;
       case HuyaPushUri.giftSubChannel:
+      case HuyaPushUri.giftTopChannel:
+      case HuyaPushUri.giftGameBroadcast:
+      case HuyaPushUri.giftOtherBroadcast:
         _handleGiftMessage(
+          msg,
+          uri: uri,
+          groupId: groupId,
+          messageId: messageId,
+        );
+        break;
+      case HuyaPushUri.bigGiftEffect:
+        _handleGiftEffectMessage(
           msg,
           uri: uri,
           groupId: groupId,
@@ -431,6 +445,28 @@ class HuyaDanmaku implements LiveDanmaku {
     return groupId == _liveGroupId || groupId == _chatGroupId;
   }
 
+  bool _isGiftTransactionUri(int uri) {
+    return uri == HuyaPushUri.giftSubChannel ||
+        uri == HuyaPushUri.giftTopChannel ||
+        uri == HuyaPushUri.giftGameBroadcast ||
+        uri == HuyaPushUri.giftOtherBroadcast;
+  }
+
+  bool _matchesGiftPresenter(HYSendItemSubBroadcastPacket gift) {
+    // presenterUid 有值时它是更精确的当前收礼主播；仅旧包缺失该字段时
+    // 才回退到 homeOwnerUid，避免把同公会/转播房间的礼物混入当前房间。
+    if (gift.presenterUid > 0) {
+      return gift.presenterUid == danmakuArgs.ayyuid;
+    }
+    return gift.homeOwnerUid == danmakuArgs.ayyuid;
+  }
+
+  int _resolvedGiftCount(HYSendItemSubBroadcastPacket gift) {
+    if (gift.itemCount > 0) return gift.itemCount;
+    if (gift.itemCountByGroup > 0) return gift.itemCountByGroup;
+    return 1;
+  }
+
   bool _matchesPresenter(int presenterUid) {
     return presenterUid == danmakuArgs.ayyuid;
   }
@@ -442,6 +478,7 @@ class HuyaDanmaku implements LiveDanmaku {
 
     final color = notice.bulletFormat.fontColor;
     final fansBadge = _parseFansBadge(notice.decorationPrefix);
+    final noble = _resolveChatNoble(notice);
     onMessage?.call(
       LiveMessage(
         type: LiveMessageType.chat,
@@ -453,6 +490,7 @@ class HuyaDanmaku implements LiveDanmaku {
           "pid": notice.pid,
           "iconUrl": notice.iconUrl,
           if (fansBadge != null) "fanBadge": fansBadge,
+          if (noble != null) ...noble,
         },
         color: color <= 0
             ? LiveMessageColor.white
@@ -461,6 +499,74 @@ class HuyaDanmaku implements LiveDanmaku {
         userName: notice.userInfo.nickName,
       ),
     );
+  }
+
+  Map<String, dynamic>? _resolveChatNoble(HYMessage notice) {
+    final directLevel = notice.userInfo.nobleLevel;
+    final nestedLevel = notice.userInfo.nobleLevelInfo.nobleLevel;
+    final hasDirectLevel = _nobleNameForLevel(directLevel).isNotEmpty;
+    final hasNestedLevel = _nobleNameForLevel(nestedLevel).isNotEmpty;
+    var level = hasDirectLevel
+        ? directLevel
+        : hasNestedLevel
+            ? nestedLevel
+            : 0;
+    var name = "";
+    var source = hasDirectLevel
+        ? "sender"
+        : hasNestedLevel
+            ? "senderInfo"
+            : "";
+
+    if (level <= 0) {
+      final legacy = _parseLegacyNoble(notice.decorationPrefix);
+      if (legacy != null) {
+        level = legacy.level;
+        name = legacy.name.trim();
+        source = "decoration";
+      }
+    }
+
+    final canonicalName = _nobleNameForLevel(level);
+    if (canonicalName.isEmpty) return null;
+    return <String, dynamic>{
+      "nobleName": name.isNotEmpty ? name : canonicalName,
+      "nobleLevel": level,
+      "nobleSource": source,
+      if (notice.userInfo.nobleLevelInfo.attrType != 0)
+        "nobleAttrType": notice.userInfo.nobleLevelInfo.attrType,
+    };
+  }
+
+  HYLegacyNobleBase? _parseLegacyNoble(
+    List<HYDecorationInfo> decorations,
+  ) {
+    for (final decoration in decorations) {
+      if (decoration.appId != _nobleDecorationAppId ||
+          decoration.data.isEmpty) {
+        continue;
+      }
+      try {
+        final noble = HYLegacyNobleBase()
+          ..readFrom(TarsInputStream(decoration.data));
+        if (_nobleNameForLevel(noble.level).isNotEmpty) return noble;
+      } catch (_) {
+        // 旧爵位装饰是兼容回退；异常时继续使用现代 SenderInfo 字段。
+      }
+    }
+    return null;
+  }
+
+  String _nobleNameForLevel(int level) {
+    return switch (level) {
+      1 => "剑士",
+      2 => "骑士",
+      3 => "领主",
+      4 => "公爵",
+      5 => "君王",
+      6 => "帝皇",
+      _ => "",
+    };
   }
 
   Map<String, dynamic>? _parseFansBadge(
@@ -522,9 +628,8 @@ class HuyaDanmaku implements LiveDanmaku {
     try {
       final gift = HYSendItemSubBroadcastPacket();
       gift.readFrom(TarsInputStream(Uint8List.fromList(msg)));
-      if (gift.itemType <= 0 || gift.itemCount <= 0) return;
-      if (!_matchesPresenter(gift.presenterUid)) return;
-      if (gift.senderUid <= 0 && gift.senderNick.trim().isEmpty) return;
+      if (gift.itemType <= 0) return;
+      if (!_matchesGiftPresenter(gift)) return;
       if (_isDuplicateGift(gift, messageId)) return;
 
       final pending = _PendingHuyaGift(
@@ -534,8 +639,9 @@ class HuyaDanmaku implements LiveDanmaku {
         messageId: messageId,
       );
       final catalogItem = _giftCatalog[gift.itemType];
-      final hasEmbeddedName = gift.propsName.trim().isNotEmpty;
-      if (!hasEmbeddedName && catalogItem == null && !_giftCatalogReady) {
+      // 目录不仅提供名称，还提供图片、价格和效果资源。任何缺少目录元数据的
+      // 礼物都短暂等待目录，避免刚进房时永久退化成通用图标。
+      if (catalogItem == null && _giftCatalogRequested && !_giftCatalogReady) {
         if (_pendingGifts.length >= _maxPendingGifts) {
           _emitGift(_pendingGifts.removeAt(0), catalogItem: null);
         }
@@ -553,14 +659,17 @@ class HuyaDanmaku implements LiveDanmaku {
     int messageId,
   ) {
     final normalizedPayId = gift.payId.trim();
-    // 服务端消息 ID 是单次广播的事实标识，应优先于可能跨连击分组复用的支付号。
-    final key = messageId > 0
-        ? "message:$messageId"
-        : normalizedPayId.isNotEmpty
-            ? "pay:$normalizedPayId:${gift.itemGroup}"
+    // 同一交易可能同时出现在 6501/6502/6507/6514，并拥有不同 messageId。
+    // 支付号与连击分组优先用于跨 URI 去重；无支付号时再使用消息 ID。
+    final key = normalizedPayId.isNotEmpty
+        ? "pay:$normalizedPayId:${gift.itemGroup}"
+        : messageId > 0
+            ? "message:$messageId"
             : "";
-    if (key.isEmpty) return false;
+    return key.isNotEmpty && _rememberGiftDuplicateKey(key);
+  }
 
+  bool _rememberGiftDuplicateKey(String key) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final expiresAt = _giftDuplicateCache[key];
     if (expiresAt != null && expiresAt > now) return true;
@@ -595,10 +704,12 @@ class HuyaDanmaku implements LiveDanmaku {
     required HYPropsItem? catalogItem,
   }) {
     final gift = pending.gift;
-    final count = gift.itemCount;
+    final count = _resolvedGiftCount(gift);
     final sender = gift.senderNick.trim().isNotEmpty
         ? gift.senderNick.trim()
-        : "UID ${gift.senderUid}";
+        : gift.senderUid > 0
+            ? "UID ${gift.senderUid}"
+            : "虎牙用户";
     final embeddedGiftName = gift.propsName.trim();
     final catalogGiftName = catalogItem?.propsName.trim() ?? "";
     final giftName = embeddedGiftName.isNotEmpty
@@ -609,6 +720,8 @@ class HuyaDanmaku implements LiveDanmaku {
     final catalogUnitPriceYb = catalogItem?.propsYb;
     final catalogNominalTotalYb =
         catalogUnitPriceYb == null ? null : catalogUnitPriceYb * count;
+    final sendContent = gift.sendContent.trim();
+    final customText = gift.customText.trim();
 
     onMessage?.call(
       LiveMessage(
@@ -640,20 +753,138 @@ class HuyaDanmaku implements LiveDanmaku {
           "homeOwnerUid": gift.homeOwnerUid,
           "effectType": gift.effectType,
           "comboScore": gift.comboScore,
+          "comboSeqId": gift.comboSeqId,
+          "comboStatus": gift.comboStatus,
+          "displayInfo": gift.displayInfo,
           "templateType": gift.templateType,
           "business": gift.business,
           "colorEffectType": gift.colorEffectType,
+          "eventType": gift.eventType,
+          "accept": gift.accept,
+          "superPurpleLevel": gift.superPurpleLevel,
+          "nobleLevel": gift.nobleLevel,
+          "vFanLevel": gift.vFanLevel,
+          "upgradeLevel": gift.upgradeLevel,
+          "multiSend": gift.multiSend,
+          "expand": gift.expand,
+          "effectInfo": {
+            "priceLevel": gift.effectInfo.priceLevel,
+            "streamDuration": gift.effectInfo.streamDuration,
+            "showType": gift.effectInfo.showType,
+            "streamId": gift.effectInfo.streamId,
+            "showAsStream": gift.effectInfo.showAsStream,
+            "showAsBigEffect": gift.effectInfo.showAsBigEffect,
+          },
+          "bizData": gift.bizData
+              .map(
+                (item) => {
+                  "type": item.type,
+                  "dataBase64": base64Encode(item.data),
+                  "text": _tryDecodeGiftBizText(item.data),
+                },
+              )
+              .toList(growable: false),
           "resourceUrl": gift.diyEffect.resourceUrl,
           "resourceAttr": gift.diyEffect.resourceAttr,
           "webResourceUrl": gift.diyEffect.webResourceUrl,
           "pcResourceUrl": gift.diyEffect.pcResourceUrl,
-          "content": gift.sendContent,
+          // 两个字段均来自 URI 6501 广播包，不能用礼物名或本地文案代替。
+          "sendContent": sendContent,
+          "customText": customText,
+          // 保留旧字段供现有调用方兼容；其值仍严格等于服务端 sendContent。
+          "content": sendContent,
         },
         color: LiveMessageColor.white,
         message: "🎁 $sender 送出 $giftName x$count",
         userName: sender,
       ),
     );
+  }
+
+  String _tryDecodeGiftBizText(Uint8List data) {
+    if (data.isEmpty) return "";
+    try {
+      final text = utf8.decode(data, allowMalformed: false).trim();
+      if (text.isEmpty || text.contains("\u0000")) return "";
+      return text.length > 2048 ? text.substring(0, 2048) : text;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  int _effectParamInt(Map<String, String> params) {
+    const keys = <String>{
+      "paytotal",
+      "totalprice",
+      "price",
+      "value",
+      "yb",
+    };
+    for (final entry in params.entries) {
+      if (!keys.contains(entry.key.trim().toLowerCase())) continue;
+      final parsed = int.tryParse(entry.value.trim());
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return 0;
+  }
+
+  void _handleGiftEffectMessage(
+    List<int> msg, {
+    required int uri,
+    required String groupId,
+    required int messageId,
+  }) {
+    try {
+      final effect = HYLiveRoomLargeConsumptionEffectNotice();
+      effect.readFrom(TarsInputStream(Uint8List.fromList(msg)));
+      if (effect.presenterUid != danmakuArgs.ayyuid) return;
+
+      final sender = effect.customerNick.trim().isNotEmpty
+          ? effect.customerNick.trim()
+          : effect.customerUid > 0
+              ? "UID ${effect.customerUid}"
+              : "虎牙用户";
+      final itemName =
+          effect.itemName.trim().isNotEmpty ? effect.itemName.trim() : "高价值礼物";
+      final duplicateKey =
+          "effect:${effect.effectId}:${effect.customerUid}:$itemName";
+      if (_rememberGiftDuplicateKey(duplicateKey)) return;
+
+      onMessage?.call(
+        LiveMessage(
+          type: LiveMessageType.gift,
+          data: {
+            "kind": "giftEffectNotice",
+            "uri": uri,
+            "groupId": groupId,
+            "messageId": messageId,
+            "effectId": effect.effectId,
+            "presenterUid": effect.presenterUid,
+            "sender": sender,
+            "senderUid": effect.customerUid,
+            "senderIcon": effect.customerAvatar,
+            "recipientUid": effect.recipientUid,
+            "recipientNick": effect.recipientNick,
+            "recipientAvatar": effect.recipientAvatar,
+            "giftName": itemName,
+            "giftId": effect.effectId,
+            "count": 1,
+            "itemCount": 1,
+            "payTotal": _effectParamInt(effect.effectParams),
+            "isBigEffect": true,
+            "effectParams": effect.effectParams,
+            "giftEffectUrls": effect.effectParams.values
+                .where((value) => value.trim().isNotEmpty)
+                .toList(growable: false),
+          },
+          color: LiveMessageColor.white,
+          message: "🎁 $sender 送出 $itemName",
+          userName: sender,
+        ),
+      );
+    } catch (e) {
+      CoreLog.error("解析虎牙大额礼物特效消息($uri)失败: $e");
+    }
   }
 
   void _handleVipEnter(

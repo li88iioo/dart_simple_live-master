@@ -89,7 +89,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   final Rxn<HuyaGiftDanmakuEvent> activeHuyaGiftEffect =
       Rxn<HuyaGiftDanmakuEvent>();
   final HuyaGiftDanmakuQueue _huyaGiftQueue =
-      HuyaGiftDanmakuQueue(maxPending: 1);
+      HuyaGiftDanmakuQueue(maxPending: 3);
   Timer? _huyaGiftEffectTimer;
   Worker? _huyaGiftSettingWorker;
   Worker? _huyaGiftLiveStatusWorker;

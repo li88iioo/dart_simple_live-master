@@ -102,6 +102,39 @@ void main() {
     expect(size.width, lessThan(huyaChatGiftMaxWidth));
   });
 
+  testWidgets('互动礼物展示服务端真实文案且允许自然换行', (tester) async {
+    final event = _event(
+      nominalTotalYb: null,
+      giftImageUrl: 'https://cdn.example.com/gift/light.webp',
+      giftEffectImageUrl: '',
+      giftName: '告白灯牌',
+      interactionText: '今天也要一直喜欢你，愿每次相遇都闪闪发光',
+    );
+
+    await tester.pumpWidget(
+      _testHost(
+        HuyaGiftPresentation(
+          event: event,
+          placement: HuyaGiftOverlayPlacement.chat,
+          maxWidth: huyaChatGiftMaxWidth,
+          reduceMotion: true,
+          imageProviderBuilder: (_) => _memoryImage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final text = find.text('今天也要一直喜欢你，愿每次相遇都闪闪发光');
+    expect(text, findsOneWidget);
+    final textWidget = tester.widget<Text>(text);
+    expect(textWidget.maxLines, isNull);
+    expect(textWidget.overflow, isNull);
+    expect(
+      find.byKey(const ValueKey('huya-gift-interaction-text')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('高价值礼物仍是边缘卡且只绘制一个远程礼物资源', (tester) async {
     final event = _event(
       nominalTotalYb: huyaGiftHighlightThresholdYb,
@@ -166,6 +199,7 @@ HuyaGiftDanmakuEvent _event({
   String sender = '测试用户',
   String giftName = '虎粮',
   int count = 3,
+  String interactionText = '',
 }) {
   return HuyaGiftDanmakuEvent(
     id: 'gift-test',
@@ -181,6 +215,7 @@ HuyaGiftDanmakuEvent _event({
     effectWebResourceUrl: '',
     effectPcResourceUrl: '',
     effectResourceAttr: '',
+    interactionText: interactionText,
     giftImageUrl: giftImageUrl,
     giftEffectImageUrl: giftEffectImageUrl,
     nominalTotalYb: nominalTotalYb,

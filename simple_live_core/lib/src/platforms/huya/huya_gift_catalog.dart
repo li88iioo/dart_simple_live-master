@@ -214,13 +214,8 @@ String? _normalizeResourceCandidate(String value) {
 String _resourceCandidateKey(String value) {
   final uri = Uri.tryParse(value);
   if (uri == null || !uri.hasAuthority) {
-    final queryIndex = value.indexOf('?');
     final fragmentIndex = value.indexOf('#');
-    final end = <int>[
-      if (queryIndex >= 0) queryIndex,
-      if (fragmentIndex >= 0) fragmentIndex,
-    ].fold(value.length, (current, index) => index < current ? index : current);
-    return value.substring(0, end);
+    return fragmentIndex < 0 ? value : value.substring(0, fragmentIndex);
   }
 
   final port = uri.hasPort &&
@@ -228,7 +223,9 @@ String _resourceCandidateKey(String value) {
               (uri.scheme == 'https' && uri.port == 443))
       ? ':${uri.port}'
       : '';
-  return '${uri.host.toLowerCase()}$port${uri.path}';
+  // CDN 查询参数可能携带尺寸、动画变体或签名，不能只按 path 去重。
+  final query = uri.hasQuery ? '?${uri.query}' : '';
+  return '${uri.scheme.toLowerCase()}://${uri.host.toLowerCase()}$port${uri.path}$query';
 }
 
 /// 礼物目录中当前功能需要的可信字段。

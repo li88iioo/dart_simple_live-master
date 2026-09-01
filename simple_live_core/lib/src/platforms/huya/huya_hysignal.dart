@@ -27,6 +27,10 @@ class HuyaPushUri {
   static const int vipBarCount = 6211;
   static const int vipBarSimpleList = 6213;
   static const int giftSubChannel = 6501;
+  static const int giftTopChannel = 6502;
+  static const int giftGameBroadcast = 6507;
+  static const int giftOtherBroadcast = 6514;
+  static const int bigGiftEffect = 6541;
   static const int attendeeCount = 8006;
 }
 
@@ -430,7 +434,18 @@ class HYLiveRoomLargeConsumptionEffectNotice extends TarsStruct {
   }
 
   @override
-  void writeTo(TarsOutputStream _os) {}
+  void writeTo(TarsOutputStream _os) {
+    _os.write(presenterUid, 0);
+    _os.write(effectId, 1);
+    _os.write(customerUid, 2);
+    _os.write(customerNick, 3);
+    _os.write(customerAvatar, 4);
+    _os.write(recipientUid, 5);
+    _os.write(recipientNick, 6);
+    _os.write(recipientAvatar, 7);
+    _os.write(itemName, 8);
+    _os.write(effectParams, 9);
+  }
 
   @override
   Object deepCopy() {

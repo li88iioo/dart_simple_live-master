@@ -80,6 +80,109 @@ void main() {
     expect(event.id, endsWith('-8'));
   });
 
+  test('互动礼物优先展示服务端 customText 且不伪造文案', () {
+    final customTextEvent = HuyaGiftDanmakuEvent.fromMessage(
+      LiveMessage(
+        type: LiveMessageType.gift,
+        userName: '送礼用户',
+        message: 'gift',
+        color: LiveMessageColor.white,
+        data: const {
+          'giftName': '告白灯牌',
+          'customText': '今天也要一直喜欢你',
+          'sendContent': '备用服务端文案',
+        },
+      ),
+      sequence: 2,
+    );
+    final plainContentEvent = HuyaGiftDanmakuEvent.fromMessage(
+      LiveMessage(
+        type: LiveMessageType.gift,
+        userName: '送礼用户',
+        message: 'gift',
+        color: LiveMessageColor.white,
+        data: const {'sendContent': '来自服务端的互动文字'},
+      ),
+      sequence: 3,
+    );
+    final structuredContentEvent = HuyaGiftDanmakuEvent.fromMessage(
+      LiveMessage(
+        type: LiveMessageType.gift,
+        userName: '送礼用户',
+        message: 'gift',
+        color: LiveMessageColor.white,
+        data: const {'sendContent': '{"supportCamp":{"id":1}}'},
+      ),
+      sequence: 4,
+    );
+
+    expect(customTextEvent.interactionText, '今天也要一直喜欢你');
+    expect(plainContentEvent.interactionText, '来自服务端的互动文字');
+    expect(structuredContentEvent.interactionText, isEmpty);
+  });
+
+  test('6541 高价值特效事件可提取图标、动画与互动文案', () {
+    final event = HuyaGiftDanmakuEvent.fromMessage(
+      LiveMessage(
+        type: LiveMessageType.gift,
+        userName: '高价值用户',
+        message: 'gift',
+        color: LiveMessageColor.white,
+        data: const {
+          'kind': 'giftEffectNotice',
+          'messageId': 6541001,
+          'effectId': 70001,
+          'senderUid': 8899,
+          'sender': '高价值用户',
+          'giftName': '星河飞船',
+          'giftId': 70001,
+          'count': 1,
+          'payTotal': 188000,
+          'isBigEffect': true,
+          'effectParams': {
+            'iconUrl': '//cdn.example.com/gift/starship.webp',
+            'animationUrl': 'https://cdn.example.com/gift/starship.svga',
+            'copy': '{"content":"一路星河送给你"}',
+          },
+        },
+      ),
+      sequence: 12,
+    );
+
+    expect(event.id, 'giftEffectNotice-message-6541001');
+    expect(
+      event.giftEffectImageUrl,
+      'https://cdn.example.com/gift/starship.webp',
+    );
+    expect(
+      event.giftAnimationUrls,
+      contains('https://cdn.example.com/gift/starship.svga'),
+    );
+    expect(event.interactionText, '一路星河送给你');
+    expect(event.nominalTotalYb, 188000);
+    expect(event.isBigEffect, isTrue);
+    expect(event.isHighlight, isTrue);
+  });
+
+  test('服务端 payTotal 可在目录价格缺失时识别高价值礼物', () {
+    final event = HuyaGiftDanmakuEvent.fromMessage(
+      LiveMessage(
+        type: LiveMessageType.gift,
+        userName: '高价值用户',
+        message: 'gift',
+        color: LiveMessageColor.white,
+        data: const {
+          'giftName': '星河',
+          'payTotal': huyaGiftHighlightThresholdYb,
+        },
+      ),
+      sequence: 5,
+    );
+
+    expect(event.nominalTotalYb, huyaGiftHighlightThresholdYb);
+    expect(event.isHighlight, isTrue);
+  });
+
   test('只允许明确的 HTTP 图片扩展名进入图片解码器', () {
     expect(
       isSafeHuyaGiftImageUrl('//cdn.example.com/gift/rocket.PNG?version=2'),
@@ -183,7 +286,7 @@ void main() {
     expect(event.isHighlight, isFalse);
   });
 
-  test('同一 CDN 礼物资源不会同时作为主图和效果图', () {
+  test('同一路径的不同 CDN 查询变体会保留为独立礼物资源', () {
     final event = HuyaGiftDanmakuEvent.fromMessage(
       LiveMessage(
         type: LiveMessageType.gift,
@@ -207,7 +310,10 @@ void main() {
       event.giftImageUrl,
       'https://cdn.example.com/gift/food.webp?size=108',
     );
-    expect(event.giftEffectImageUrl, isNull);
+    expect(
+      event.giftEffectImageUrl,
+      'https://cdn.example.com/gift/food.webp?animation=1',
+    );
   });
 
   test('礼物队列有上限并优先保留最新待展示事件', () {
@@ -226,6 +332,27 @@ void main() {
     expect(queue.advance()?.id, third.id);
     expect(queue.advance()?.id, fourth.id);
     expect(queue.advance(), isNull);
+  });
+
+  test('普通礼物洪峰不会把待展示的高价值礼物挤出队列', () {
+    final queue = HuyaGiftDanmakuQueue(maxPending: 3);
+    final active = _event('active');
+    final highValue = _event(
+      'high-value',
+      nominalTotalYb: huyaGiftHighlightThresholdYb,
+    );
+
+    expect(queue.enqueue(active), isTrue);
+    queue.enqueue(_event('normal-1'));
+    queue.enqueue(highValue);
+    queue.enqueue(_event('normal-2'));
+    queue.enqueue(_event('normal-3'));
+    queue.enqueue(_event('normal-4'));
+
+    expect(queue.pendingCount, 3);
+    expect(queue.advance()?.id, highValue.id);
+    expect(queue.advance()?.isHighlight, isFalse);
+    expect(queue.advance()?.isHighlight, isFalse);
   });
 
   test('普通礼物和高价值礼物使用不同的低干扰停留时间', () {
@@ -249,11 +376,11 @@ void main() {
 
     expect(
       resolveHuyaGiftDisplayDuration(normal),
-      const Duration(milliseconds: 2100),
+      const Duration(milliseconds: 2200),
     );
     expect(
       resolveHuyaGiftDisplayDuration(highlight),
-      const Duration(milliseconds: 2600),
+      const Duration(milliseconds: 2700),
     );
   });
 
@@ -305,7 +432,7 @@ void main() {
   });
 }
 
-HuyaGiftDanmakuEvent _event(String id) {
+HuyaGiftDanmakuEvent _event(String id, {int? nominalTotalYb}) {
   return HuyaGiftDanmakuEvent(
     id: id,
     sender: id,
@@ -320,5 +447,6 @@ HuyaGiftDanmakuEvent _event(String id) {
     effectWebResourceUrl: '',
     effectPcResourceUrl: '',
     effectResourceAttr: '',
+    nominalTotalYb: nominalTotalYb,
   );
 }

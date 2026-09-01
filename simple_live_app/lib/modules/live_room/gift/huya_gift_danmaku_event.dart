@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:simple_live_core/simple_live_core.dart';
@@ -11,6 +12,39 @@ const Set<String> _huyaGiftImageExtensions = <String>{
   '.jpeg',
   '.webp',
   '.gif',
+  '.avif',
+};
+
+const Set<String> _huyaGiftNonImageExtensions = <String>{
+  '.svga',
+  '.zip',
+  '.mp4',
+  '.webm',
+  '.json',
+  '.vap',
+  '.lottie',
+  '.bin',
+};
+
+const Set<String> _huyaInteractionTextKeys = <String>{
+  'text',
+  'content',
+  'message',
+  'msg',
+  'usertext',
+  'customtext',
+  'sendcontent',
+  'blessing',
+  'wish',
+  'slogan',
+  'title',
+  'subtitle',
+  'desc',
+  'description',
+  'word',
+  'copy',
+  'copywriting',
+  'interactiontext',
 };
 
 @immutable
@@ -29,9 +63,16 @@ class HuyaGiftDanmakuEvent {
     required this.effectWebResourceUrl,
     required this.effectPcResourceUrl,
     required this.effectResourceAttr,
+    this.interactionText = '',
     this.giftImageUrl,
     this.giftEffectImageUrl,
+    this.giftImageUrls = const <String>[],
+    this.giftEffectImageUrls = const <String>[],
+    this.giftAnimationUrls = const <String>[],
     this.nominalTotalYb,
+    this.isBigEffect = false,
+    this.effectShowType = 0,
+    this.effectStreamDuration = 0,
   });
 
   factory HuyaGiftDanmakuEvent.fromMessage(
@@ -41,6 +82,7 @@ class HuyaGiftDanmakuEvent {
     final data = message.data is Map
         ? Map<String, dynamic>.from(message.data as Map)
         : const <String, dynamic>{};
+    final kind = _asText(data['kind']);
     final messageId = _asInt(data['messageId']);
     final giftId = _asInt(data['giftId']);
     final senderUid = _asInt(data['senderUid']);
@@ -49,32 +91,60 @@ class HuyaGiftDanmakuEvent {
     final pcResourceUrl = _asText(data['pcResourceUrl']);
     final catalogImageUrls = _asStringList(data['giftImageUrls']);
     final catalogEffectUrls = _asStringList(data['giftEffectUrls']);
-    final giftImageUrl = selectHuyaGiftImageUrl(
-      catalogUrls: catalogImageUrls,
-      resourceUrl: resourceUrl,
-      webResourceUrl: webResourceUrl,
-      pcResourceUrl: pcResourceUrl,
+    final effectParamUrls = _collectHttpUrls(data['effectParams']);
+
+    final giftImageUrls = collectHuyaGiftImageUrls(<String>[
+      ...catalogImageUrls,
+      resourceUrl,
+      webResourceUrl,
+      pcResourceUrl,
+    ]);
+    final giftEffectImageUrls = collectHuyaGiftImageUrls(<String>[
+      ...catalogEffectUrls,
+      ...effectParamUrls,
+      webResourceUrl,
+      resourceUrl,
+      pcResourceUrl,
+    ]).where((url) => !giftImageUrls.contains(url)).toList(growable: false);
+    final giftAnimationUrls = collectHuyaGiftAnimationUrls(<String>[
+      ...catalogEffectUrls,
+      ...effectParamUrls,
+      webResourceUrl,
+      resourceUrl,
+      pcResourceUrl,
+    ]);
+
+    final giftName = _asText(data['giftName'], fallback: '礼物');
+    final interactionText = extractHuyaGiftInteractionText(
+      <dynamic>[
+        data['customText'],
+        data['sendContent'],
+        data['content'],
+        data['expand'],
+        data['effectParams'],
+        data['bizData'],
+      ],
+      giftName: giftName,
     );
-    final selectedEffectImageUrl = selectHuyaGiftEffectImageUrl(
-      catalogUrls: catalogEffectUrls,
-      resourceUrl: resourceUrl,
-      webResourceUrl: webResourceUrl,
-      pcResourceUrl: pcResourceUrl,
-    );
-    final giftEffectImageUrl = _sameHuyaGiftImageResource(
-      giftImageUrl,
-      selectedEffectImageUrl,
-    )
-        ? null
-        : selectedEffectImageUrl;
+    final effectInfo = data['effectInfo'] is Map
+        ? Map<dynamic, dynamic>.from(data['effectInfo'] as Map)
+        : const <dynamic, dynamic>{};
+    final catalogNominalTotalYb = _asNullableInt(data['catalogNominalTotalYb']);
+    final serverPayTotalYb = _asNullableInt(data['payTotal']);
+    final isEffectNotice = kind == 'giftEffectNotice';
+    final effectId = _asInt(data['effectId']);
 
     return HuyaGiftDanmakuEvent(
       id: messageId > 0
-          ? 'message-$messageId'
-          : 'gift-$giftId-$senderUid-$sequence',
+          ? kind.isEmpty
+              ? 'message-$messageId'
+              : '$kind-message-$messageId'
+          : isEffectNotice && effectId > 0
+              ? 'effect-$effectId-$senderUid-$sequence'
+              : 'gift-$giftId-$senderUid-$sequence',
       sender: _asText(data['sender'], fallback: message.userName),
       senderIcon: _asText(data['senderIcon']),
-      giftName: _asText(data['giftName'], fallback: '礼物'),
+      giftName: giftName,
       giftId: giftId,
       count: _clampCount(_asInt(data['count'])),
       effectType: _asInt(data['effectType']),
@@ -84,9 +154,16 @@ class HuyaGiftDanmakuEvent {
       effectWebResourceUrl: webResourceUrl,
       effectPcResourceUrl: pcResourceUrl,
       effectResourceAttr: _asText(data['resourceAttr']),
-      giftImageUrl: giftImageUrl,
-      giftEffectImageUrl: giftEffectImageUrl,
-      nominalTotalYb: _asNullableInt(data['catalogNominalTotalYb']),
+      interactionText: interactionText,
+      giftImageUrl: giftImageUrls.firstOrNull,
+      giftEffectImageUrl: giftEffectImageUrls.firstOrNull,
+      giftImageUrls: giftImageUrls,
+      giftEffectImageUrls: giftEffectImageUrls,
+      giftAnimationUrls: giftAnimationUrls,
+      nominalTotalYb: _maxNullableInt(catalogNominalTotalYb, serverPayTotalYb),
+      isBigEffect: isEffectNotice || _asBool(data['isBigEffect']),
+      effectShowType: _asInt(effectInfo['showType']),
+      effectStreamDuration: _asInt(effectInfo['streamDuration']),
     );
   }
 
@@ -104,22 +181,49 @@ class HuyaGiftDanmakuEvent {
   final String effectPcResourceUrl;
   final String effectResourceAttr;
 
-  /// 礼物目录中的静态/动态图标，仅包含可交给图片解码器的 URL。
+  /// 服务端随互动礼物下发的真实文案，例如告白灯牌内容。
+  final String interactionText;
+
+  /// 兼容旧调用方的首个静态图标。
   final String? giftImageUrl;
 
-  /// 礼物目录或广播中的光效图，仅接收 PNG/WebP/GIF 等安全图片资源。
+  /// 兼容旧调用方的首个可解码效果图。
   final String? giftEffectImageUrl;
+
+  /// 按优先级排列的静态图标候选。首个失败时 UI 会自动尝试下一项。
+  final List<String> giftImageUrls;
+
+  /// 按优先级排列的 PNG/WebP/GIF 等效果图候选。
+  final List<String> giftEffectImageUrls;
+
+  /// SVGA/ZIP/MP4/JSON/VAP 等复杂动画资源。当前至少用于识别高价值
+  /// 礼物并保证降级卡片可见，后续原生动画渲染可直接复用。
+  final List<String> giftAnimationUrls;
+
   final int? nominalTotalYb;
+  final bool isBigEffect;
+  final int effectShowType;
+  final int effectStreamDuration;
+
+  List<String> get presentationImageUrls => _uniqueUrls(<String>[
+        ...giftImageUrls,
+        if (giftImageUrl != null) giftImageUrl!,
+        ...giftEffectImageUrls,
+        if (giftEffectImageUrl != null) giftEffectImageUrl!,
+      ]);
 
   bool get isHighlight {
-    // 协议中的 effectType/colorEffectType/comboScore 并不代表实际价值，
-    // 虎粮等普通礼物也可能携带这些效果位。只有目录明确给出总价值且达到
-    // 阈值时，才允许使用稍加强调的边缘卡；价格未知一律按普通礼物展示。
     final nominalValue = nominalTotalYb;
-    return nominalValue != null && nominalValue >= huyaGiftHighlightThresholdYb;
+    return isBigEffect ||
+        (effectShowType & 2) != 0 ||
+        giftAnimationUrls.isNotEmpty ||
+        (nominalValue != null && nominalValue >= huyaGiftHighlightThresholdYb);
   }
 
-  String get semanticsLabel => '$sender 送出 $giftName，共 $count 个';
+  String get semanticsLabel {
+    final base = '$sender 送出 $giftName，共 $count 个';
+    return interactionText.isEmpty ? base : '$base，$interactionText';
+  }
 }
 
 class HuyaGiftDanmakuQueue {
@@ -138,11 +242,34 @@ class HuyaGiftDanmakuQueue {
       return true;
     }
 
-    if (_pending.length >= maxPending) {
-      _pending.removeFirst();
+    if (event.isHighlight) {
+      if (_pending.length >= maxPending && !_removeOldestNormal()) {
+        _pending.removeLast();
+      }
+      // 高价值礼物优先成为下一条，但不打断当前正在展示的礼物。
+      _pending.addFirst(event);
+      return false;
+    }
+
+    if (_pending.length >= maxPending && !_removeOldestNormal()) {
+      // 队列已全部是高价值礼物时，普通礼物不再覆盖它们。
+      return false;
     }
     _pending.addLast(event);
     return false;
+  }
+
+  bool _removeOldestNormal() {
+    HuyaGiftDanmakuEvent? candidate;
+    for (final event in _pending) {
+      if (!event.isHighlight) {
+        candidate = event;
+        break;
+      }
+    }
+    if (candidate == null) return false;
+    _pending.remove(candidate);
+    return true;
   }
 
   HuyaGiftDanmakuEvent? advance() {
@@ -156,11 +283,18 @@ class HuyaGiftDanmakuQueue {
   }
 }
 
-/// 普通礼物短暂提示，高价值礼物仅多停留少量时间，不长期遮挡画面。
+/// 普通礼物短暂提示；复杂或高价值礼物多停留少量时间，但不长期遮挡画面。
 Duration resolveHuyaGiftDisplayDuration(HuyaGiftDanmakuEvent event) {
+  if (event.isBigEffect || event.giftAnimationUrls.isNotEmpty) {
+    final serverDuration = event.effectStreamDuration;
+    if (serverDuration > 0) {
+      return Duration(milliseconds: serverDuration.clamp(2600, 4200));
+    }
+    return const Duration(milliseconds: 3200);
+  }
   return event.isHighlight
-      ? const Duration(milliseconds: 2600)
-      : const Duration(milliseconds: 2100);
+      ? const Duration(milliseconds: 2700)
+      : const Duration(milliseconds: 2200);
 }
 
 enum GiftMessageUiAction {
@@ -195,10 +329,10 @@ bool shouldShowHuyaGiftDanmakuEffect({
   return isHuya && giftDanmakuEnabled && isLive && !isBackground;
 }
 
-/// 只允许明确的 HTTP(S) 图片资源进入 NetImage，避免把 SVGA、ZIP、
-/// Web 动画或未知二进制资源误交给图片解码器。
+/// 允许明确图片格式以及无扩展名的 HTTP(S) CDN 地址；已知动画/压缩格式
+/// 不会交给 Flutter 图片解码器，而是保留在 animationUrls 中做安全降级。
 bool isSafeHuyaGiftImageUrl(String? value) {
-  final normalized = _normalizeHuyaGiftImageUrl(value);
+  final normalized = _normalizeHuyaGiftUrl(value);
   if (normalized == null) return false;
 
   final uri = Uri.tryParse(normalized);
@@ -206,7 +340,12 @@ bool isSafeHuyaGiftImageUrl(String? value) {
   if (uri.scheme != 'http' && uri.scheme != 'https') return false;
 
   final path = uri.path.toLowerCase();
-  return _huyaGiftImageExtensions.any(path.endsWith);
+  if (_huyaGiftNonImageExtensions.any(path.endsWith)) return false;
+  if (_huyaGiftImageExtensions.any(path.endsWith)) return true;
+
+  final lastSegment = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+  // 虎牙部分 CDN 通过 query/响应 MIME 决定格式，路径没有扩展名。
+  return lastSegment.isNotEmpty && !lastSegment.contains('.');
 }
 
 String? selectHuyaGiftImageUrl({
@@ -215,12 +354,12 @@ String? selectHuyaGiftImageUrl({
   required String webResourceUrl,
   required String pcResourceUrl,
 }) {
-  return _selectSafeHuyaGiftImageUrl(<String>[
+  return collectHuyaGiftImageUrls(<String>[
     ...catalogUrls,
     webResourceUrl,
     resourceUrl,
     pcResourceUrl,
-  ]);
+  ]).firstOrNull;
 }
 
 String? selectHuyaGiftEffectImageUrl({
@@ -229,41 +368,167 @@ String? selectHuyaGiftEffectImageUrl({
   required String webResourceUrl,
   required String pcResourceUrl,
 }) {
-  return _selectSafeHuyaGiftImageUrl(<String>[
+  return collectHuyaGiftImageUrls(<String>[
     ...catalogUrls,
     webResourceUrl,
     resourceUrl,
     pcResourceUrl,
-  ]);
+  ]).firstOrNull;
 }
 
-String? _selectSafeHuyaGiftImageUrl(Iterable<String> candidates) {
+List<String> collectHuyaGiftImageUrls(Iterable<String> candidates) {
+  return _uniqueUrls(
+    candidates.where((candidate) => isSafeHuyaGiftImageUrl(candidate)),
+  );
+}
+
+List<String> collectHuyaGiftAnimationUrls(Iterable<String> candidates) {
+  return _uniqueUrls(
+    candidates.where((candidate) {
+      final normalized = _normalizeHuyaGiftUrl(candidate);
+      if (normalized == null || isSafeHuyaGiftImageUrl(normalized)) {
+        return false;
+      }
+      final uri = Uri.tryParse(normalized);
+      return uri != null &&
+          uri.hasAuthority &&
+          (uri.scheme == 'http' || uri.scheme == 'https');
+    }),
+  );
+}
+
+@visibleForTesting
+String extractHuyaGiftInteractionText(
+  Iterable<dynamic> candidates, {
+  String giftName = '',
+}) {
   for (final candidate in candidates) {
-    final normalized = _normalizeHuyaGiftImageUrl(candidate);
-    if (isSafeHuyaGiftImageUrl(normalized)) return normalized;
+    final extracted = _extractInteractionValue(candidate, depth: 0);
+    final cleaned = _cleanInteractionText(extracted, giftName: giftName);
+    if (cleaned.isNotEmpty) return cleaned;
   }
-  return null;
+  return '';
 }
 
-String? _normalizeHuyaGiftImageUrl(String? value) {
+String _extractInteractionValue(dynamic value, {required int depth}) {
+  if (value == null || depth > 4) return '';
+
+  if (value is String) {
+    final text = value.trim();
+    if (text.isEmpty) return '';
+    if ((text.startsWith('{') && text.endsWith('}')) ||
+        (text.startsWith('[') && text.endsWith(']'))) {
+      try {
+        return _extractInteractionValue(jsonDecode(text), depth: depth + 1);
+      } catch (_) {
+        return '';
+      }
+    }
+    return text;
+  }
+
+  if (value is Map) {
+    final normalized = <String, dynamic>{
+      for (final entry in value.entries)
+        entry.key.toString().toLowerCase(): entry.value,
+    };
+    for (final key in _huyaInteractionTextKeys) {
+      if (!normalized.containsKey(key)) continue;
+      final result = _extractInteractionValue(
+        normalized[key],
+        depth: depth + 1,
+      );
+      if (result.isNotEmpty) return result;
+    }
+    for (final nested in normalized.values) {
+      if (nested is! Map && nested is! Iterable) continue;
+      final result = _extractInteractionValue(nested, depth: depth + 1);
+      if (result.isNotEmpty) return result;
+    }
+    return '';
+  }
+
+  if (value is Iterable) {
+    for (final item in value) {
+      final result = _extractInteractionValue(item, depth: depth + 1);
+      if (result.isNotEmpty) return result;
+    }
+  }
+  return '';
+}
+
+String _cleanInteractionText(String value, {required String giftName}) {
+  var text = value
+      .replaceAll(RegExp(r'[\u0000-\u001F]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (text.isEmpty || _normalizeHuyaGiftUrl(text) != null) return '';
+  if (text.length > 160) text = '${text.substring(0, 157)}…';
+
+  final normalized = text.replaceAll(RegExp(r'\s+'), '');
+  final normalizedGift = giftName.replaceAll(RegExp(r'\s+'), '');
+  if (normalizedGift.isNotEmpty &&
+      (normalized == normalizedGift ||
+          normalized == '送出$normalizedGift' ||
+          normalized == '赠送$normalizedGift')) {
+    return '';
+  }
+  return text;
+}
+
+List<String> _collectHttpUrls(dynamic value, {int depth = 0}) {
+  if (value == null || depth > 4) return const <String>[];
+  if (value is String) {
+    final trimmed = value.trim();
+    final direct = _normalizeHuyaGiftUrl(trimmed);
+    if (direct != null) return <String>[direct];
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return _collectHttpUrls(jsonDecode(trimmed), depth: depth + 1);
+      } catch (_) {
+        return const <String>[];
+      }
+    }
+    return const <String>[];
+  }
+  if (value is Map) {
+    return _uniqueUrls(
+      value.values.expand((item) => _collectHttpUrls(item, depth: depth + 1)),
+    );
+  }
+  if (value is Iterable) {
+    return _uniqueUrls(
+      value.expand((item) => _collectHttpUrls(item, depth: depth + 1)),
+    );
+  }
+  return const <String>[];
+}
+
+String? _normalizeHuyaGiftUrl(String? value) {
   final url = value?.trim() ?? '';
   if (url.isEmpty) return null;
-  return url.startsWith('//') ? 'https:$url' : url;
+  final normalized = url.startsWith('//') ? 'https:$url' : url;
+  final uri = Uri.tryParse(normalized);
+  if (uri == null ||
+      !uri.hasAuthority ||
+      (uri.scheme != 'http' && uri.scheme != 'https')) {
+    return null;
+  }
+  return normalized;
 }
 
-bool _sameHuyaGiftImageResource(String? first, String? second) {
-  final firstUrl = _normalizeHuyaGiftImageUrl(first);
-  final secondUrl = _normalizeHuyaGiftImageUrl(second);
-  if (firstUrl == null || secondUrl == null) return false;
-
-  final firstUri = Uri.tryParse(firstUrl);
-  final secondUri = Uri.tryParse(secondUrl);
-  if (firstUri == null || secondUri == null) return firstUrl == secondUrl;
-
-  // CDN 同一资源常只在协议、查询参数或缓存签名上不同。播放器不应因此
-  // 把同一张礼物图同时当成主图与效果图绘制两次。
-  return firstUri.host.toLowerCase() == secondUri.host.toLowerCase() &&
-      firstUri.path == secondUri.path;
+List<String> _uniqueUrls(Iterable<String> candidates) {
+  final result = <String>[];
+  final seen = <String>{};
+  for (final candidate in candidates) {
+    final normalized = _normalizeHuyaGiftUrl(candidate);
+    if (normalized == null) continue;
+    final uri = Uri.parse(normalized);
+    final key = uri.replace(fragment: '').toString();
+    if (seen.add(key)) result.add(normalized);
+  }
+  return result;
 }
 
 List<String> _asStringList(dynamic value) {
@@ -284,6 +549,12 @@ int _asInt(dynamic value) {
   return int.tryParse(value?.toString() ?? '') ?? 0;
 }
 
+bool _asBool(dynamic value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  return value?.toString().toLowerCase() == 'true';
+}
+
 int _clampCount(int value) {
   if (value < 1) return 1;
   if (value > 999999) return 999999;
@@ -294,4 +565,10 @@ int? _asNullableInt(dynamic value) {
   if (value == null) return null;
   final parsed = _asInt(value);
   return parsed > 0 ? parsed : null;
+}
+
+int? _maxNullableInt(int? first, int? second) {
+  if (first == null) return second;
+  if (second == null) return first;
+  return first >= second ? first : second;
 }

@@ -39,6 +39,7 @@ import 'package:simple_live_app/services/migration_service.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 import 'package:simple_live_app/services/window_service.dart';
 import 'package:simple_live_app/src/rust/frb_generated.dart';
+import 'package:simple_live_app/widgets/desktop/slive_linux_window_frame.dart';
 import 'package:simple_live_app/widgets/status/app_loadding_widget.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -77,7 +78,7 @@ Future initWindow() async {
     return;
   }
   await windowManager.ensureInitialized();
-  WindowService.instance.init();
+  await WindowService.instance.init();
 }
 
 Future initServices() async {
@@ -222,89 +223,94 @@ class MyApp extends StatelessWidget {
             builder: FlutterSmartDialog.init(
               loadingBuilder: ((msg) => const AppLoaddingWidget()),
               // 尊重系统字体设置，同时限制极端缩放，避免移动端控件跳位。
-              builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                  textScaler: TextScaler.linear(
-                    MediaQuery.textScalerOf(context)
-                        .scale(1)
-                        .clamp(0.9, 1.5)
-                        .toDouble(),
+              builder: (context, child) {
+                final mediaQuery = MediaQuery.of(context);
+                final appContent = MediaQuery(
+                  data: mediaQuery.copyWith(
+                    textScaler: TextScaler.linear(
+                      mediaQuery.textScaler.scale(1).clamp(0.9, 1.5).toDouble(),
+                    ),
                   ),
-                ),
-                child: Stack(
-                  children: [
-                    //侧键返回
-                    RawGestureDetector(
-                      excludeFromSemantics: true,
-                      gestures: <Type, GestureRecognizerFactory>{
-                        FourthButtonTapGestureRecognizer:
-                            GestureRecognizerFactoryWithHandlers<
-                                FourthButtonTapGestureRecognizer>(
-                          () => FourthButtonTapGestureRecognizer(),
-                          (FourthButtonTapGestureRecognizer instance) {
-                            instance.onTapDown =
-                                (TapDownDetails details) async {
-                              //如果处于全屏状态，退出全屏
+                  child: Stack(
+                    children: [
+                      //侧键返回
+                      RawGestureDetector(
+                        excludeFromSemantics: true,
+                        gestures: <Type, GestureRecognizerFactory>{
+                          FourthButtonTapGestureRecognizer:
+                              GestureRecognizerFactoryWithHandlers<
+                                  FourthButtonTapGestureRecognizer>(
+                            () => FourthButtonTapGestureRecognizer(),
+                            (FourthButtonTapGestureRecognizer instance) {
+                              instance.onTapDown =
+                                  (TapDownDetails details) async {
+                                //如果处于全屏状态，退出全屏
+                                if (!Platform.isAndroid && !Platform.isIOS) {
+                                  if (await windowManager.isFullScreen()) {
+                                    await windowManager.setFullScreen(false);
+                                    return;
+                                  }
+                                }
+                                Get.back();
+                              };
+                            },
+                          ),
+                        },
+                        child: KeyboardListener(
+                          focusNode: FocusNode(),
+                          onKeyEvent: (KeyEvent event) async {
+                            if (event is KeyDownEvent &&
+                                event.logicalKey == LogicalKeyboardKey.escape) {
+                              // ESC退出全屏
+                              // 如果处于全屏状态，退出全屏
                               if (!Platform.isAndroid && !Platform.isIOS) {
                                 if (await windowManager.isFullScreen()) {
                                   await windowManager.setFullScreen(false);
+                                  EventBus.instance
+                                      .emit(EventBus.kEscapePressed, 0);
                                   return;
                                 }
                               }
-                              Get.back();
-                            };
-                          },
-                        ),
-                      },
-                      child: KeyboardListener(
-                        focusNode: FocusNode(),
-                        onKeyEvent: (KeyEvent event) async {
-                          if (event is KeyDownEvent &&
-                              event.logicalKey == LogicalKeyboardKey.escape) {
-                            // ESC退出全屏
-                            // 如果处于全屏状态，退出全屏
-                            if (!Platform.isAndroid && !Platform.isIOS) {
-                              if (await windowManager.isFullScreen()) {
-                                await windowManager.setFullScreen(false);
-                                EventBus.instance
-                                    .emit(EventBus.kEscapePressed, 0);
-                                return;
-                              }
                             }
-                          }
-                          // 空格键暂停/播放
-                          if (event is KeyDownEvent &&
-                              event.logicalKey == LogicalKeyboardKey.space) {
-                            EventBus.instance.emit(EventBus.kSpacePressed, 0);
-                          }
-                        },
-                        child: child!,
+                            // 空格键暂停/播放
+                            if (event is KeyDownEvent &&
+                                event.logicalKey == LogicalKeyboardKey.space) {
+                              EventBus.instance.emit(EventBus.kSpacePressed, 0);
+                            }
+                          },
+                          child: child!,
+                        ),
                       ),
-                    ),
 
-                    //查看DEBUG日志按钮
-                    //只在Debug、Profile模式显示
-                    Visibility(
-                      visible: !kReleaseMode,
-                      child: Positioned(
-                        right: 12,
-                        bottom: 100 + context.mediaQueryViewPadding.bottom,
-                        child: Opacity(
-                          opacity: 0.4,
-                          child: ElevatedButton(
-                            child: const Text("DEBUG LOG"),
-                            onPressed: () {
-                              Get.bottomSheet(
-                                const DebugLogPage(),
-                              );
-                            },
+                      //查看DEBUG日志按钮
+                      //只在Debug、Profile模式显示
+                      Visibility(
+                        visible: !kReleaseMode,
+                        child: Positioned(
+                          right: 12,
+                          bottom: 100 + context.mediaQueryViewPadding.bottom,
+                          child: Opacity(
+                            opacity: 0.4,
+                            child: ElevatedButton(
+                              child: const Text("DEBUG LOG"),
+                              onPressed: () {
+                                Get.bottomSheet(
+                                  const DebugLogPage(),
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
+                    ],
+                  ),
+                );
+
+                if (Platform.isLinux && Get.isRegistered<WindowService>()) {
+                  return SliveLinuxWindowFrame(child: appContent);
+                }
+                return appContent;
+              },
             ),
           );
         });

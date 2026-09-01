@@ -53,11 +53,44 @@ class HYPushMessage extends TarsStruct {
   void displayAsString(StringBuffer sb, int level) {}
 }
 
+class HYNobleLevelInfo extends TarsStruct {
+  int nobleLevel = 0;
+  int attrType = 0;
+
+  @override
+  void readFrom(TarsInputStream _is) {
+    nobleLevel = _is.read(nobleLevel, 0, false);
+    attrType = _is.read(attrType, 1, false);
+  }
+
+  @override
+  void writeTo(TarsOutputStream _os) {
+    _os.write(nobleLevel, 0);
+    _os.write(attrType, 1);
+  }
+
+  @override
+  Object deepCopy() {
+    return HYNobleLevelInfo()
+      ..nobleLevel = nobleLevel
+      ..attrType = attrType;
+  }
+
+  @override
+  void displayAsString(StringBuffer sb, int level) {}
+}
+
 class HYSender extends TarsStruct {
   int uid = 0;
   int lMid = 0;
   String nickName = "";
   int gender = 0;
+  String avatarUrl = "";
+  int nobleLevel = 0;
+  HYNobleLevelInfo nobleLevelInfo = HYNobleLevelInfo();
+  String guid = "";
+  String huyaUa = "";
+  int userType = 0;
 
   @override
   void readFrom(TarsInputStream _is) {
@@ -65,6 +98,13 @@ class HYSender extends TarsStruct {
     lMid = _is.read(lMid, 1, false);
     nickName = _is.read(nickName, 2, false);
     gender = _is.read(gender, 3, false);
+    avatarUrl = _is.read(avatarUrl, 4, false);
+    nobleLevel = _is.read(nobleLevel, 5, false);
+    nobleLevelInfo =
+        _is.readTarsStruct(nobleLevelInfo, 6, false) as HYNobleLevelInfo;
+    guid = _is.read(guid, 7, false);
+    huyaUa = _is.read(huyaUa, 8, false);
+    userType = _is.read(userType, 9, false);
   }
 
   @override
@@ -73,6 +113,12 @@ class HYSender extends TarsStruct {
     _os.write(lMid, 1);
     _os.write(nickName, 2);
     _os.write(gender, 3);
+    _os.write(avatarUrl, 4);
+    _os.write(nobleLevel, 5);
+    _os.write(nobleLevelInfo, 6);
+    _os.write(guid, 7);
+    _os.write(huyaUa, 8);
+    _os.write(userType, 9);
   }
 
   @override
@@ -81,7 +127,13 @@ class HYSender extends TarsStruct {
       ..uid = uid
       ..lMid = lMid
       ..nickName = nickName
-      ..gender = gender;
+      ..gender = gender
+      ..avatarUrl = avatarUrl
+      ..nobleLevel = nobleLevel
+      ..nobleLevelInfo = nobleLevelInfo.deepCopy() as HYNobleLevelInfo
+      ..guid = guid
+      ..huyaUa = huyaUa
+      ..userType = userType;
   }
 
   @override
@@ -179,6 +231,36 @@ class HYFansBadgeInfo extends TarsStruct {
       ..badgeId = badgeId
       ..badgeName = badgeName
       ..badgeLevel = badgeLevel;
+  }
+
+  @override
+  void displayAsString(StringBuffer sb, int level) {}
+}
+
+/// 旧版 MessageNotice appId 10200 装饰中的爵位基础信息。
+///
+/// 这里只读取 UI 所需的 tag 2/3；其它历史字段由 TARS 安全跳过。
+class HYLegacyNobleBase extends TarsStruct {
+  int level = 0;
+  String name = "";
+
+  @override
+  void readFrom(TarsInputStream _is) {
+    level = _is.read(level, 2, false);
+    name = _is.read(name, 3, false);
+  }
+
+  @override
+  void writeTo(TarsOutputStream _os) {
+    _os.write(level, 2);
+    _os.write(name, 3);
+  }
+
+  @override
+  Object deepCopy() {
+    return HYLegacyNobleBase()
+      ..level = level
+      ..name = name;
   }
 
   @override

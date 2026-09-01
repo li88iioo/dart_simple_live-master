@@ -110,6 +110,9 @@ HYSendItemSubBroadcastPacket _gift({
   String senderNick = '测试用户',
   String propsName = '虎粮',
   String payId = 'pay-1',
+  String sendContent = '',
+  String customText = '',
+  int payTotal = 0,
 }) {
   return HYSendItemSubBroadcastPacket()
     ..itemType = itemType
@@ -121,10 +124,12 @@ HYSendItemSubBroadcastPacket _gift({
     ..presenterNick = '测试主播'
     ..propsName = propsName
     ..payId = payId
+    ..sendContent = sendContent
+    ..customText = customText
     ..roomId = 1995
     ..homeOwnerUid = _presenterUid
     ..payType = 0
-    ..payTotal = 0;
+    ..payTotal = payTotal;
 }
 
 void main() {
@@ -333,6 +338,93 @@ void main() {
       });
     });
 
+    test('URI 1400 从 SenderInfo 解析普通聊天爵位', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final notice = HYMessage()
+        ..userInfo = (HYSender()
+          ..uid = 10003
+          ..nickName = '公爵用户'
+          ..nobleLevel = 4
+          ..nobleLevelInfo = (HYNobleLevelInfo()
+            ..nobleLevel = 4
+            ..attrType = 2))
+        ..content = '带爵位的普通弹幕';
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.chat,
+          payload: _encodeStruct(notice),
+          messageId: 102,
+        ),
+      );
+
+      final data = messages.single.data as Map;
+      expect(data['nobleName'], '公爵');
+      expect(data['nobleLevel'], 4);
+      expect(data['nobleSource'], 'sender');
+      expect(data['nobleAttrType'], 2);
+    });
+
+    test('SenderInfo 直接等级缺失时兼容 NobleLevelInfo', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final notice = HYMessage()
+        ..userInfo = (HYSender()
+          ..uid = 10004
+          ..nickName = '君王用户'
+          ..nobleLevelInfo = (HYNobleLevelInfo()
+            ..nobleLevel = 5
+            ..attrType = 1))
+        ..content = '嵌套爵位字段';
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.chat,
+          payload: _encodeStruct(notice),
+          messageId: 103,
+        ),
+      );
+
+      final data = messages.single.data as Map;
+      expect(data['nobleName'], '君王');
+      expect(data['nobleLevel'], 5);
+      expect(data['nobleSource'], 'senderInfo');
+    });
+
+    test('现代爵位字段缺失时回退解析 10200 旧装饰', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final notice = HYMessage()
+        ..userInfo = (HYSender()
+          ..uid = 10005
+          ..nickName = '旧协议用户')
+        ..content = '旧版爵位装饰'
+        ..decorationPrefix = <HYDecorationInfo>[
+          HYDecorationInfo()
+            ..appId = 10200
+            ..viewType = 0
+            ..data = _encodeStruct(
+              HYLegacyNobleBase()
+                ..level = 3
+                ..name = '领主',
+            ),
+        ];
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.chat,
+          payload: _encodeStruct(notice),
+          messageId: 104,
+        ),
+      );
+
+      final data = messages.single.data as Map;
+      expect(data['nobleName'], '领主');
+      expect(data['nobleLevel'], 3);
+      expect(data['nobleSource'], 'decoration');
+    });
+
     test('无有效 10400 装饰时普通弹幕不伪造粉丝牌', () {
       final messages = <LiveMessage>[];
       final danmaku = _createDanmaku(messages);
@@ -352,6 +444,8 @@ void main() {
 
       final data = messages.single.data as Map;
       expect(data.containsKey('fanBadge'), isFalse);
+      expect(data.containsKey('nobleLevel'), isFalse);
+      expect(data.containsKey('nobleName'), isFalse);
     });
 
     test('解析真实抓包的 URI 6211 贵宾人数快照', () {
@@ -482,6 +576,50 @@ void main() {
       expect(data['catalogNominalTotalYb'], isNull);
     });
 
+    test('透传互动礼物的服务端真实文案字段', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final gift = _gift(
+        propsName: '告白灯牌',
+        payId: 'pay-interactive',
+        sendContent: '备用服务端文案',
+        customText: '今天也要一直喜欢你',
+      );
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(gift),
+          messageId: 208,
+        ),
+      );
+
+      expect(messages, hasLength(1));
+      final data = messages.single.data as Map;
+      expect(data['giftName'], '告白灯牌');
+      expect(data['customText'], '今天也要一直喜欢你');
+      expect(data['sendContent'], '备用服务端文案');
+      expect(data['content'], '备用服务端文案');
+    });
+
+    test('透传服务端实付总额供高价值礼物识别', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(
+            _gift(payId: 'pay-high-value', payTotal: 100000),
+          ),
+          messageId: 209,
+        ),
+      );
+
+      expect(messages, hasLength(1));
+      expect((messages.single.data as Map)['payTotal'], 100000);
+    });
+
     test('透传 DIY 大礼物资源字段供 UI 安全选择图片', () {
       final messages = <LiveMessage>[];
       final danmaku = _createDanmaku(messages);
@@ -550,11 +688,14 @@ void main() {
       final data = messages.single.data as Map;
       expect(data['giftImageUrls'], <String>[
         'https://cdn.example.com/gift/catalog-108.webp?token=first',
+        'https://cdn.example.com/gift/catalog-108.webp?token=second',
         'https://cdn.example.com/gift/catalog-icon.gif',
         'https://cdn.example.com/gift/android.png',
+        'https://cdn.example.com/gift/android.png?platform=iphone',
       ]);
       expect(data['giftEffectUrls'], <String>[
         'https://cdn.example.com/gift/chat-effect.gif?token=first',
+        'https://cdn.example.com/gift/chat-effect.gif?token=second',
         'https://cdn.example.com/gift/real-effect.webp',
       ]);
     });
@@ -634,7 +775,7 @@ void main() {
       expect((messages.single.data as Map)['giftName'], '未知礼物（ID 99999）');
     });
 
-    test('不使用 itemCountByGroup 猜测本次礼物数量', () {
+    test('itemCount 缺失时使用服务端 itemCountByGroup 兜底', () {
       final messages = <LiveMessage>[];
       final danmaku = _createDanmaku(messages);
       final gift = _gift(itemCount: 0, payId: 'pay-zero')
@@ -648,7 +789,8 @@ void main() {
         ),
       );
 
-      expect(messages, isEmpty);
+      expect(messages, hasLength(1));
+      expect((messages.single.data as Map)['count'], 88);
     });
 
     test('相同支付号的不同 itemGroup 不会被误判为重复礼物', () {
@@ -725,6 +867,128 @@ void main() {
       );
 
       expect(messages, hasLength(2));
+    });
+
+    test('6501/6502/6507/6514 的同一支付交易只展示一次', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final payload = _encodeStruct(
+        _gift(payId: 'cross-channel-payment')..itemGroup = 3,
+      );
+      final uris = <int>[
+        HuyaPushUri.giftSubChannel,
+        HuyaPushUri.giftTopChannel,
+        HuyaPushUri.giftGameBroadcast,
+        HuyaPushUri.giftOtherBroadcast,
+      ];
+
+      for (var index = 0; index < uris.length; index++) {
+        danmaku.decodeMessage(
+          _wrapPush(
+            uri: uris[index],
+            payload: payload,
+            messageId: 900 + index,
+          ),
+        );
+      }
+
+      expect(messages, hasLength(1));
+      expect((messages.single.data as Map)['uri'], HuyaPushUri.giftSubChannel);
+    });
+
+    test('6541 高价值礼物特效可解析为可展示礼物事件', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final effect = HYLiveRoomLargeConsumptionEffectNotice()
+        ..presenterUid = _presenterUid
+        ..effectId = 70001
+        ..customerUid = 8899
+        ..customerNick = '高价值用户'
+        ..customerAvatar = '//cdn.example.com/avatar.webp'
+        ..recipientUid = _presenterUid
+        ..recipientNick = '测试主播'
+        ..itemName = '星河飞船'
+        ..effectParams = <String, String>{
+          'PAYTOTAL': '188000',
+          'iconUrl': '//cdn.example.com/gift/starship.webp',
+          'animationUrl': 'https://cdn.example.com/gift/starship.svga',
+          'copy': '{"content":"一路星河送给你"}',
+        };
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.bigGiftEffect,
+          payload: _encodeStruct(effect),
+          groupId: '',
+          messageId: 951,
+        ),
+      );
+
+      expect(messages, hasLength(1));
+      expect(messages.single.type, LiveMessageType.gift);
+      final data = messages.single.data as Map;
+      expect(data['kind'], 'giftEffectNotice');
+      expect(data['giftName'], '星河飞船');
+      expect(data['sender'], '高价值用户');
+      expect(data['payTotal'], 188000);
+      expect(data['isBigEffect'], isTrue);
+      expect(
+        data['giftEffectUrls'],
+        contains('https://cdn.example.com/gift/starship.svga'),
+      );
+    });
+
+    test('礼物扩展字段、效果信息和互动业务数据完整透传', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final gift = _gift(
+        payId: 'complete-fields',
+        propsName: '告白灯牌',
+      )
+        ..expand = '{"content":"今晚的星光都送给你"}'
+        ..comboSeqId = 81
+        ..comboStatus = 2
+        ..displayInfo = 6
+        ..eventType = 7
+        ..accept = 1
+        ..superPurpleLevel = 3
+        ..nobleLevel = 4
+        ..vFanLevel = 25
+        ..upgradeLevel = 2
+        ..multiSend = 1
+        ..effectInfo = (HYItemEffectInfo()
+          ..priceLevel = 5
+          ..streamDuration = 3600
+          ..showType = 3
+          ..streamId = 99)
+        ..bizData = <HYItemEffectBizData>[
+          HYItemEffectBizData()
+            ..type = 12
+            ..data = Uint8List.fromList(
+              utf8.encode('{"message":"永远支持你"}'),
+            ),
+        ];
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(gift),
+          messageId: 952,
+        ),
+      );
+
+      final data = messages.single.data as Map;
+      expect(data['expand'], gift.expand);
+      expect(data['comboSeqId'], 81);
+      expect(data['comboStatus'], 2);
+      expect(data['displayInfo'], 6);
+      expect(data['eventType'], 7);
+      expect(data['nobleLevel'], 4);
+      expect(data['vFanLevel'], 25);
+      expect(data['multiSend'], 1);
+      expect((data['effectInfo'] as Map)['showAsStream'], isTrue);
+      expect((data['effectInfo'] as Map)['showAsBigEffect'], isTrue);
+      expect((data['bizData'] as List).single['text'], contains('永远支持你'));
     });
 
     test('丢弃错误分组、错误主播和重复消息事件', () {

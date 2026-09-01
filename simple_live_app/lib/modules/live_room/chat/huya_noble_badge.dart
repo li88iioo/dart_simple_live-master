@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
+import 'package:simple_live_app/modules/live_room/chat/huya_chat_badge_style.dart';
 import 'package:simple_live_app/widgets/glass/slive_glass_surface.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
@@ -13,21 +14,40 @@ class HuyaNobleBadge {
   final String name;
   final int level;
 
+  static const Map<int, String> _names = <int, String>{
+    1: '剑士',
+    2: '骑士',
+    3: '领主',
+    4: '公爵',
+    5: '君王',
+    6: '帝皇',
+  };
+
   static HuyaNobleBadge? fromMessage(LiveMessage message) {
-    if (message.type != LiveMessageType.vipEnter || message.data is! Map) {
+    if ((message.type != LiveMessageType.chat &&
+            message.type != LiveMessageType.vipEnter) ||
+        message.data is! Map) {
       return null;
     }
     final data = message.data as Map;
-    final name = data['nobleName']?.toString().trim() ?? '';
     final rawLevel = data['nobleLevel'];
     final level = rawLevel is num
         ? rawLevel.toInt()
         : int.tryParse(rawLevel?.toString() ?? '') ?? 0;
-    if (name.isEmpty || level <= 0) return null;
-    return HuyaNobleBadge(name: name, level: level);
+    final canonicalName = _names[level];
+    if (canonicalName == null) return null;
+    final serverName = data['nobleName']?.toString().trim() ?? '';
+    return HuyaNobleBadge(
+      name: serverName.isEmpty ? canonicalName : serverName,
+      level: level,
+    );
   }
 }
 
+/// 与粉丝牌共用垂直基线的 16dp 爵位方印。
+///
+/// 小尺寸、无描边、无阴影，只用固定爵位色和单字表达身份，避免尖底盾牌在
+/// 14dp 弹幕正文中显得像额外贴入的游戏图标。
 class HuyaNobleBadgeChip extends StatelessWidget {
   const HuyaNobleBadgeChip({
     super.key,
@@ -38,106 +58,107 @@ class HuyaNobleBadgeChip extends StatelessWidget {
   final HuyaNobleBadge badge;
   final double fontSize;
 
-  Color _accent() {
+  String _emblemText() {
     return switch (badge.level) {
-      <= 1 => const Color(0xFF6F839A),
-      2 => const Color(0xFF4F8B82),
-      3 => const Color(0xFF806EA3),
-      4 => const Color(0xFFA16A78),
-      5 => const Color(0xFFAA783A),
-      _ => const Color(0xFFA45F3E),
+      1 => '剑',
+      2 => '骑',
+      3 => '领',
+      4 => '公',
+      5 => '君',
+      6 => '帝',
+      _ => '爵',
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeColors = context.sliveColors;
-    final accent = _accent();
-    final height = (fontSize + 3).clamp(17.0, 20.0).toDouble();
-    final markSize = (height - 4).clamp(12.0, 15.0).toDouble();
-    final labelSize = (fontSize - 2).clamp(10.0, 12.0).toDouble();
-    final textColor = Color.lerp(accent, themeColors.textSecondary, 0.18)!;
+    final palette = huyaNobleBadgePaletteForLevel(badge.level);
+    final foreground = huyaNobleBadgeForegroundForLevel(badge.level);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final size = (16 * textScale.clamp(1.0, 1.08)).clamp(16.0, 17.3);
+    final emblemFontSize = (fontSize - 4.8).clamp(8.8, 9.4).toDouble();
 
     return Semantics(
       label: '虎牙爵位 ${badge.name}',
-      child: SizedBox(
-        key: const ValueKey('huya-noble-badge-chip'),
-        height: height,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CustomPaint(
-              key: const ValueKey('huya-noble-badge-mark'),
-              size: Size.square(markSize),
-              painter: _HuyaNobleMarkPainter(accent: accent),
-            ),
-            const SizedBox(width: 3.5),
-            MediaQuery.withClampedTextScaling(
-              maxScaleFactor: 1.15,
-              child: Text(
-                badge.name,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.fade,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: labelSize,
-                  height: 1,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.1,
+      child: Tooltip(
+        message: '虎牙爵位 · ${badge.name}',
+        waitDuration: const Duration(milliseconds: 500),
+        child: SizedBox.square(
+          key: const ValueKey('huya-noble-badge-chip'),
+          dimension: size,
+          child: CustomPaint(
+            key: const ValueKey('huya-noble-badge-paint'),
+            painter: _HuyaNobleSealPainter(palette: palette),
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.08,
+              child: Center(
+                child: Text(
+                  _emblemText(),
+                  key: const ValueKey('huya-noble-badge-glyph'),
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: emblemFontSize,
+                    height: 1,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.15,
+                  ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _HuyaNobleMarkPainter extends CustomPainter {
-  const _HuyaNobleMarkPainter({required this.accent});
+class _HuyaNobleSealPainter extends CustomPainter {
+  const _HuyaNobleSealPainter({required this.palette});
 
-  final Color accent;
+  final HuyaChatBadgePalette palette;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final side = size.shortestSide * 0.62;
-    final rect = Rect.fromCenter(center: center, width: side, height: side);
-
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(0.7853981633974483);
-    canvas.translate(-center.dx, -center.dy);
-
-    final jewel = RRect.fromRectAndRadius(
-      rect,
-      Radius.circular(size.shortestSide * 0.14),
+    final bounds = Offset.zero & size;
+    final seal = RRect.fromRectAndRadius(
+      bounds,
+      const Radius.circular(3.5),
     );
     canvas.drawRRect(
-      jewel,
-      Paint()..color = accent.withValues(alpha: 0.13),
-    );
-    canvas.drawRRect(
-      jewel,
+      seal,
       Paint()
-        ..color = accent.withValues(alpha: 0.68)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.9,
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            palette.bodyStart,
+            palette.bodyEnd,
+          ],
+        ).createShader(bounds),
     );
-    canvas.restore();
 
-    canvas.drawCircle(
-      center,
-      size.shortestSide * 0.105,
-      Paint()..color = accent.withValues(alpha: 0.86),
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(1, 1, size.width - 2, size.height * 0.42),
+        const Radius.circular(2.6),
+      ),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Colors.white.withValues(alpha: 0.10),
+            Colors.white.withValues(alpha: 0),
+          ],
+        ).createShader(bounds),
     );
   }
 
   @override
-  bool shouldRepaint(covariant _HuyaNobleMarkPainter oldDelegate) {
-    return oldDelegate.accent != accent;
+  bool shouldRepaint(covariant _HuyaNobleSealPainter oldDelegate) {
+    return oldDelegate.palette != palette;
   }
 }
 
@@ -169,7 +190,9 @@ class HuyaVipEnterMessage extends StatelessWidget {
                 fontSize: fontSize,
               ),
             ),
-            const WidgetSpan(child: SizedBox(width: 6)),
+            const WidgetSpan(
+              child: SizedBox(width: HuyaChatBadgeStyle.badgeToTextGap),
+            ),
           ],
           TextSpan(
             text: message.userName,

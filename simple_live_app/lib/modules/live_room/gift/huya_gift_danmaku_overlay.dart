@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:extended_image/extended_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
@@ -77,9 +79,15 @@ double resolveHuyaChatGiftPreferredWidth(
 
   final senderWidth = measure(event.sender, senderStyle);
   final detailWidth = measure('送出 ${event.giftName}', detailStyle);
+  final interactionWidth = event.interactionText.isEmpty
+      ? 0.0
+      : measure(event.interactionText, detailStyle);
   final countWidth =
       math.max(38.0, measure('×${event.count}', countStyle) + 16);
-  final copyWidth = math.max(senderWidth, detailWidth);
+  final copyWidth = math.max(
+    senderWidth,
+    math.max(detailWidth, interactionWidth),
+  );
   // 左右内边距 + 礼物图 + 间距 + 独立数量区。数量不再挤占礼物名尾部。
   final fixedWidth = 9.0 + 40.0 + 8.0 + 8.0 + countWidth + 10.0;
   return (fixedWidth + copyWidth).clamp(boundedMin, boundedMax).toDouble();
@@ -92,10 +100,10 @@ Alignment resolveHuyaGiftOverlayAlignment(HuyaGiftOverlayPlacement placement) {
       : Alignment.bottomLeft;
 }
 
-/// 礼物 UI 只选择一个远程资源，避免图标和效果图重复显示。
+/// 返回首个可展示资源，保留该方法兼容现有调用与测试。实际图片组件会在加载
+/// 失败时依次尝试 [HuyaGiftDanmakuEvent.presentationImageUrls] 的后续候选。
 String? selectHuyaGiftPresentationImageUrl(HuyaGiftDanmakuEvent event) {
-  return _safeGiftImageUrl(event.giftImageUrl) ??
-      _safeGiftImageUrl(event.giftEffectImageUrl);
+  return event.presentationImageUrls.firstOrNull;
 }
 
 class HuyaGiftDanmakuOverlay extends StatelessWidget {
@@ -291,7 +299,7 @@ class _GiftEdgeCard extends StatelessWidget {
     final highlight = event.isHighlight;
     final accent = highlight ? const Color(0xFFFFB35D) : colors.huya;
     final artworkSize = _isPlayer ? 42.0 : 40.0;
-    final imageUrl = selectHuyaGiftPresentationImageUrl(event);
+    final imageUrls = event.presentationImageUrls;
     final surface = _isPlayer
         ? Colors.black.withValues(alpha: highlight ? 0.31 : 0.23)
         : Color.alphaBlend(
@@ -345,7 +353,7 @@ class _GiftEdgeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _GiftArtwork(
-                  imageUrl: imageUrl,
+                  imageUrls: imageUrls,
                   size: artworkSize,
                   accent: accent,
                   playerPlacement: _isPlayer,
@@ -433,6 +441,22 @@ class _GiftCopy extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
+        if (event.interactionText.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            event.interactionText,
+            key: const ValueKey('huya-gift-interaction-text'),
+            softWrap: true,
+            style: TextStyle(
+              color: playerPlacement
+                  ? foreground.withValues(alpha: 0.82)
+                  : foreground.withValues(alpha: 0.78),
+              fontSize: 10.5,
+              height: 1.18,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -479,14 +503,14 @@ class _GiftCountBadge extends StatelessWidget {
 
 class _GiftArtwork extends StatelessWidget {
   const _GiftArtwork({
-    required this.imageUrl,
+    required this.imageUrls,
     required this.size,
     required this.accent,
     required this.playerPlacement,
     required this.imageProviderBuilder,
   });
 
-  final String? imageUrl;
+  final List<String> imageUrls;
   final double size;
   final Color accent;
   final bool playerPlacement;
@@ -520,10 +544,10 @@ class _GiftArtwork extends StatelessWidget {
               width: 0.5,
             ),
           ),
-          child: imageUrl == null
+          child: imageUrls.isEmpty
               ? fallback
               : _GiftRemoteImage(
-                  imageUrl: imageUrl!,
+                  imageUrls: imageUrls,
                   size: size,
                   fallback: fallback,
                   imageProviderBuilder: imageProviderBuilder,
@@ -534,54 +558,97 @@ class _GiftArtwork extends StatelessWidget {
   }
 }
 
-class _GiftRemoteImage extends StatelessWidget {
+class _GiftRemoteImage extends StatefulWidget {
   const _GiftRemoteImage({
-    required this.imageUrl,
+    required this.imageUrls,
     required this.size,
     required this.fallback,
     required this.imageProviderBuilder,
   });
 
-  final String imageUrl;
+  final List<String> imageUrls;
   final double size;
   final Widget fallback;
   final HuyaGiftImageProviderBuilder? imageProviderBuilder;
 
   @override
+  State<_GiftRemoteImage> createState() => _GiftRemoteImageState();
+}
+
+class _GiftRemoteImageState extends State<_GiftRemoteImage> {
+  int _candidateIndex = 0;
+  bool _advanceScheduled = false;
+
+  @override
+  void didUpdateWidget(covariant _GiftRemoteImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.imageUrls, widget.imageUrls)) {
+      _candidateIndex = 0;
+      _advanceScheduled = false;
+    }
+  }
+
+  void _tryNextCandidate() {
+    if (_advanceScheduled || _candidateIndex + 1 >= widget.imageUrls.length) {
+      return;
+    }
+    _advanceScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _candidateIndex++;
+        _advanceScheduled = false;
+      });
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final normalizedUrl = _normalizeGiftImageUrl(imageUrl);
+    final normalizedUrl = _normalizeGiftImageUrl(
+      widget.imageUrls[_candidateIndex],
+    );
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final cacheDimension = math.max(
       1,
-      math.min(160, (size * pixelRatio).round()),
+      math.min(160, (widget.size * pixelRatio).round()),
     );
-    final imageProvider = imageProviderBuilder?.call(normalizedUrl) ??
-        ResizeImage.resizeIfNeeded(
-          cacheDimension,
-          cacheDimension,
-          NetworkImage(normalizedUrl),
+    final imageProvider = widget.imageProviderBuilder?.call(normalizedUrl) ??
+        ExtendedResizeImage.resizeIfNeeded(
+          provider: ExtendedNetworkImageProvider(
+            normalizedUrl,
+            cache: true,
+            printError: false,
+            retries: 1,
+            timeLimit: const Duration(seconds: 5),
+            headers: const <String, String>{
+              'Referer': 'https://www.huya.com/',
+              'User-Agent':
+                  'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Mobile Safari/537.36',
+            },
+          ),
+          cacheWidth: cacheDimension,
+          cacheHeight: cacheDimension,
         );
 
     return Image(
       key: const ValueKey('huya-gift-remote-image'),
       image: imageProvider,
-      width: size,
-      height: size,
+      width: widget.size,
+      height: widget.size,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.low,
       gaplessPlayback: true,
       excludeFromSemantics: true,
-      errorBuilder: (_, error, stackTrace) => fallback,
+      errorBuilder: (_, error, stackTrace) {
+        _tryNextCandidate();
+        return widget.fallback;
+      },
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded || frame != null) return child;
-        return fallback;
+        return widget.fallback;
       },
     );
   }
-}
-
-String? _safeGiftImageUrl(String? imageUrl) {
-  return isSafeHuyaGiftImageUrl(imageUrl) ? imageUrl?.trim() : null;
 }
 
 String _normalizeGiftImageUrl(String imageUrl) {
