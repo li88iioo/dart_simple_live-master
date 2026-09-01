@@ -296,9 +296,25 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Flatten release assets
+        run: |
+          mkdir -p release-assets-flat
+          while IFS= read -r -d '' artifact; do
+            destination="release-assets-flat/$(basename "${artifact}")"
+            if [ -e "${destination}" ]; then
+              echo "Duplicate release artifact name: $(basename "${artifact}")" >&2
+              exit 1
+            fi
+            cp "${artifact}" "${destination}"
+          done < <(
+            find release-assets -type f \
+              \( -name '*.apk' -o -name '*.deb' -o -name '*.zip' -o -name '*.msix' -o -name '*.exe' \) \
+              -print0
+          )
+
       - name: Verify release assets
         run: |
-          find release-assets -maxdepth 1 -type f -print | sort
+          find release-assets-flat -maxdepth 1 -type f -print | sort
           for artifact in \
             app-armeabi-v7a-release.apk \
             app-arm64-v8a-release.apk \
@@ -307,13 +323,13 @@ jobs:
             Slive-x86_64-linux.zip \
             Slive-aarch64-linux.deb \
             Slive-aarch64-linux.zip; do
-            test -f "release-assets/${artifact}" || {
+            test -f "release-assets-flat/${artifact}" || {
               echo "Missing required release artifact: ${artifact}" >&2
               exit 1
             }
           done
-          test "$(find release-assets -maxdepth 1 -type f -name '*.msix' | wc -l)" -ge 1
-          test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l)" -ge 1
+          test "$(find release-assets-flat -maxdepth 1 -type f -name '*.msix' | wc -l)" -ge 1
+          test "$(find release-assets-flat -maxdepth 1 -type f -name '*.exe' | wc -l)" -ge 1
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
@@ -325,8 +341,8 @@ jobs:
           token: ${{ secrets.TOKEN || github.token }}
           fail_on_unmatched_files: true
           files: |
-            release-assets/*.apk
-            release-assets/*.deb
-            release-assets/*.zip
-            release-assets/*.msix
-            release-assets/*.exe
+            release-assets-flat/*.apk
+            release-assets-flat/*.deb
+            release-assets-flat/*.zip
+            release-assets-flat/*.msix
+            release-assets-flat/*.exe
