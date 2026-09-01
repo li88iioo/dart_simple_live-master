@@ -59,6 +59,7 @@ class BiliBiliDanmaku implements LiveDanmaku {
     webScoketUtils = WebScoketUtils(
       url: "wss://${args.serverHost}/sub",
       heartBeatTime: heartbeatTime,
+      readTimeout: const Duration(seconds: 150),
       headers: args.cookie.isEmpty
           ? null
           : {
@@ -143,45 +144,112 @@ class BiliBiliDanmaku implements LiveDanmaku {
     return writer.buffer;
   }
 
+  static const int _packetHeaderLength = 16;
+  static const int _maxPacketNesting = 8;
+  static const int _maxDecodedFrameLength = 32 * 1024 * 1024;
+
   void decodeMessage(List<int> data) {
     try {
-      //协议版本。0为JSON，可以直接解析；1为房间人气值,Body为4位Int32；2为压缩过Buffer，需要解压再处理
-      int protocolVersion = readInt(data, 6, 2);
-      //操作类型。3=心跳回应，内容为房间人气值；5=通知，弹幕、广播等全部信息；8=进房回应，空
-      int operation = readInt(data, 8, 4);
-      //内容
-      var body = data.skip(16).toList();
-      if (operation == 3) {
-        var online = readInt(body, 0, 4);
-
-        onMessage?.call(
-          LiveMessage(
-            type: LiveMessageType.online,
-            data: online,
-            color: LiveMessageColor.white,
-            message: "",
-            userName: "",
-          ),
-        );
-      } else if (operation == 5) {
-        if (protocolVersion == 2) {
-          body = zlib.decode(body);
-        } else if (protocolVersion == 3) {
-          body = brotli.decode(body);
-        }
-
-        var text = utf8.decode(body, allowMalformed: true);
-
-        var group =
-            text.split(RegExp(r"[\x00-\x1f]+", unicode: true, multiLine: true));
-        for (var item
-            in group.where((x) => x.length > 2 && x.startsWith('{'))) {
-          parseMessage(item);
-        }
+      if (data.length > _maxDecodedFrameLength) {
+        throw const FormatException('Bilibili WebSocket frame 过大');
       }
+      _decodePackets(Uint8List.fromList(data), depth: 0);
     } catch (e) {
-      CoreLog.error(e);
+      CoreLog.error('Bilibili WebSocket frame 解析失败: $e');
     }
+  }
+
+  void _decodePackets(Uint8List data, {required int depth}) {
+    if (depth > _maxPacketNesting) {
+      throw const FormatException('Bilibili 压缩包嵌套层级过深');
+    }
+
+    var offset = 0;
+    while (offset < data.length) {
+      final remaining = data.length - offset;
+      if (remaining < _packetHeaderLength) {
+        throw FormatException('Bilibili 包头不完整: remaining=$remaining');
+      }
+
+      final header = ByteData.sublistView(
+        data,
+        offset,
+        offset + _packetHeaderLength,
+      );
+      final packetLength = header.getUint32(0, Endian.big);
+      final headerLength = header.getUint16(4, Endian.big);
+      final protocolVersion = header.getUint16(6, Endian.big);
+      final operation = header.getUint32(8, Endian.big);
+
+      if (headerLength < _packetHeaderLength ||
+          packetLength < headerLength ||
+          packetLength > remaining) {
+        throw FormatException(
+          'Bilibili 包长度非法: packet=$packetLength, '
+          'header=$headerLength, remaining=$remaining',
+        );
+      }
+
+      final bodyStart = offset + headerLength;
+      final packetEnd = offset + packetLength;
+      final body = Uint8List.sublistView(data, bodyStart, packetEnd);
+      _decodePacket(
+        body,
+        protocolVersion: protocolVersion,
+        operation: operation,
+        depth: depth,
+      );
+      offset = packetEnd;
+    }
+  }
+
+  void _decodePacket(
+    Uint8List body, {
+    required int protocolVersion,
+    required int operation,
+    required int depth,
+  }) {
+    if (operation == 3) {
+      if (body.length < 4) {
+        throw const FormatException('Bilibili 人气包长度不足 4 字节');
+      }
+      final online = ByteData.sublistView(body, 0, 4).getUint32(0, Endian.big);
+      onMessage?.call(
+        LiveMessage(
+          type: LiveMessageType.online,
+          data: online,
+          color: LiveMessageColor.white,
+          message: '',
+          userName: '',
+        ),
+      );
+      return;
+    }
+
+    if (operation != 5) return;
+
+    switch (protocolVersion) {
+      case 0:
+      case 1:
+        if (body.isEmpty) return;
+        parseMessage(utf8.decode(body, allowMalformed: true));
+        return;
+      case 2:
+        _decodeCompressedPackets(zlib.decode(body), depth: depth + 1);
+        return;
+      case 3:
+        _decodeCompressedPackets(brotli.decode(body), depth: depth + 1);
+        return;
+      default:
+        CoreLog.w('忽略未知 Bilibili 协议版本: $protocolVersion');
+    }
+  }
+
+  void _decodeCompressedPackets(List<int> decoded, {required int depth}) {
+    if (decoded.length > _maxDecodedFrameLength) {
+      throw const FormatException('Bilibili 解压后 frame 过大');
+    }
+    _decodePackets(Uint8List.fromList(decoded), depth: depth);
   }
 
   void parseMessage(String jsonMessage) {
@@ -239,25 +307,22 @@ class BiliBiliDanmaku implements LiveDanmaku {
   }
 
   int readInt(List<int> buffer, int start, int len) {
-    var bytes =
-        Uint8List.fromList(buffer.getRange(start, start + len).toList());
-    var byteBuffer = bytes.buffer;
-    var data = ByteData.view(byteBuffer);
-    var result = 0;
-
-    if (len == 1) {
-      result = data.getUint8(0);
+    if (start < 0 || len <= 0 || start + len > buffer.length) {
+      throw RangeError.range(start + len, 0, buffer.length, 'end');
     }
-    if (len == 2) {
-      result = data.getInt16(0, Endian.big);
+    final bytes = Uint8List.fromList(buffer);
+    final data = ByteData.sublistView(bytes, start, start + len);
+    switch (len) {
+      case 1:
+        return data.getUint8(0);
+      case 2:
+        return data.getUint16(0, Endian.big);
+      case 4:
+        return data.getUint32(0, Endian.big);
+      case 8:
+        return data.getUint64(0, Endian.big);
+      default:
+        throw ArgumentError.value(len, 'len', '只支持 1/2/4/8 字节整数');
     }
-    if (len == 4) {
-      result = data.getInt32(0, Endian.big);
-    }
-    if (len == 8) {
-      result = data.getInt64(0, Endian.big);
-    }
-
-    return result;
   }
 }

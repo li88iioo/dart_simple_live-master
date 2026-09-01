@@ -357,6 +357,7 @@ class _PlatformTabButtonState extends State<_PlatformTabButton> {
       button: true,
       selected: widget.selected,
       label: widget.site.name,
+      onTap: widget.onTap,
       child: ExcludeSemantics(
         child: Material(
           type: MaterialType.transparency,

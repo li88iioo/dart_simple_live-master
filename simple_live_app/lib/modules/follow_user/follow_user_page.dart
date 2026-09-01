@@ -19,6 +19,13 @@ import 'package:simple_live_app/widgets/live_room_card.dart';
 import 'package:simple_live_app/widgets/page_grid_view.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
+@visibleForTesting
+const bool followUserUsesNativeScrollPhysics = true;
+
+@visibleForTesting
+Key followUserStableCardKey(String itemId) =>
+    ValueKey<String>('follow-user-$itemId');
+
 class FollowUserPage extends GetView<FollowUserController> {
   const FollowUserPage({super.key});
 
@@ -110,10 +117,12 @@ class FollowUserPage extends GetView<FollowUserController> {
                       pageController: controller,
                       firstRefresh: true,
                       showPCRefreshButton: false,
+                      useNativeScrollPhysics: followUserUsesNativeScrollPhysics,
                       itemBuilder: (_, index) {
                         final item = controller.list[index];
                         final site = Sites.allSites[item.siteId]!;
                         return SliveGlassSurface(
+                          key: followUserStableCardKey(item.id),
                           variant: SliveGlassVariant.card,
                           radius: SliveRadii.card,
                           enableBackdropBlur: false,
@@ -142,6 +151,8 @@ class FollowUserPage extends GetView<FollowUserController> {
                             crossAxisSpacing: SliveLayout.gridGap,
                             crossAxisCount: cardColumnCount,
                             showPCRefreshButton: false,
+                            useNativeScrollPhysics:
+                                followUserUsesNativeScrollPhysics,
                             itemBuilder: (_, index) {
                               final item = controller.list[index];
                               final liveRoomItem = LiveRoomItem(
@@ -155,6 +166,7 @@ class FollowUserPage extends GetView<FollowUserController> {
                               return LiveRoomCard(
                                 site,
                                 liveRoomItem,
+                                key: followUserStableCardKey(item.id),
                                 onFollowRemove: hideRemoveButton
                                     ? null
                                     : () => controller.removeFollow(item),
@@ -304,6 +316,7 @@ class _FollowFilterSegmentState extends State<_FollowFilterSegment> {
       button: true,
       selected: widget.selected,
       label: widget.text,
+      onTap: widget.onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show AsyncCallback;
 import 'package:flutter/material.dart';
 import 'package:flutter_easyrefresh/easy_refresh.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -8,6 +9,95 @@ import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/widgets/status/app_empty_widget.dart';
 import 'package:simple_live_app/widgets/status/app_error_widget.dart';
 import 'package:simple_live_app/widgets/status/app_loadding_widget.dart';
+
+/// Slive 高频列表统一使用的平台原生滚动物理。
+///
+/// iOS/macOS 保留系统弹性，其它平台使用直接的边界减速；始终允许内容不足
+/// 一屏时下拉刷新。
+ScrollPhysics get slivePlatformScrollPhysics =>
+    Platform.isIOS || Platform.isMacOS
+        ? const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics())
+        : const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+
+/// 首页、关注、分类共用的原生刷新容器。
+///
+/// 加载更多仅在纵向 fling 完全结束后触发，避免滚动过程中网络回调、列表追加
+/// 和图片解码同时抢占帧预算。没有 [onLoad] 时只提供原生下拉刷新。
+class SliveNativeRefreshView extends StatefulWidget {
+  const SliveNativeRefreshView({
+    required this.onRefresh,
+    required this.child,
+    this.onLoad,
+    this.canLoadMore,
+    this.isLoading,
+    this.firstRefresh = false,
+    this.loadTriggerExtent = 560,
+    super.key,
+  });
+
+  final RefreshCallback onRefresh;
+  final Widget child;
+  final AsyncCallback? onLoad;
+  final bool Function()? canLoadMore;
+  final bool Function()? isLoading;
+  final bool firstRefresh;
+  final double loadTriggerExtent;
+
+  @override
+  State<SliveNativeRefreshView> createState() => _SliveNativeRefreshViewState();
+}
+
+class _SliveNativeRefreshViewState extends State<SliveNativeRefreshView> {
+  bool _initialRefreshRequested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleInitialRefresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant SliveNativeRefreshView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.firstRefresh && widget.firstRefresh) {
+      _scheduleInitialRefresh();
+    }
+  }
+
+  void _scheduleInitialRefresh() {
+    if (!widget.firstRefresh || _initialRefreshRequested) return;
+    _initialRefreshRequested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.onRefresh();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        final load = widget.onLoad;
+        final metrics = notification.metrics;
+        if (load != null &&
+            notification is ScrollEndNotification &&
+            metrics.axis == Axis.vertical &&
+            metrics.extentAfter < widget.loadTriggerExtent &&
+            metrics.pixels > 0 &&
+            (widget.canLoadMore?.call() ?? true) &&
+            !(widget.isLoading?.call() ?? false)) {
+          load();
+        }
+        return false;
+      },
+      child: RefreshIndicator.adaptive(
+        onRefresh: widget.onRefresh,
+        child: widget.child,
+      ),
+    );
+  }
+}
 
 class PageGridView extends StatelessWidget {
   const PageGridView({
@@ -47,10 +137,6 @@ class PageGridView extends StatelessWidget {
   bool get _isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  ScrollPhysics get _platformScrollPhysics => Platform.isIOS || Platform.isMacOS
-      ? const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics())
-      : const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
-
   @override
   Widget build(BuildContext context) {
     // 网格和状态层分开订阅：加载/错误状态切换不再重建 EasyRefresh 与 GridView。
@@ -85,29 +171,19 @@ class PageGridView extends StatelessWidget {
   }
 
   Widget _buildNativeScrollable() {
-    // 在 Android/桌面保持平台原生的直接减速，不使用 EasyRefresh 2.x 的
-    // BouncingScrollSimulation。加载更多只在接近列表底部时触发。
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (notification is ScrollEndNotification &&
-            metrics.axis == Axis.vertical &&
-            metrics.extentAfter < 560 &&
-            metrics.pixels > 0 &&
-            pageController.canLoadMore.value &&
-            !pageController.loadding) {
-          // 快速 fling 期间不发起网络请求、不追加列表；等滚动物理过程结束后
-          // 再加载下一页，避免数据通知和图片解码抢占 8.33ms 帧预算。
-          pageController.loadData();
-        }
-        return false;
+    return SliveNativeRefreshView(
+      onRefresh: () async {
+        await pageController.refreshData();
       },
-      child: RefreshIndicator.adaptive(
-        onRefresh: () async => pageController.refreshData(),
-        child: _buildGrid(
-          controller: pageController.scrollController,
-          physics: _platformScrollPhysics,
-        ),
+      onLoad: () async {
+        await pageController.loadData();
+      },
+      canLoadMore: () => pageController.canLoadMore.value,
+      isLoading: () => pageController.loadding,
+      firstRefresh: firstRefresh,
+      child: _buildGrid(
+        controller: pageController.scrollController,
+        physics: slivePlatformScrollPhysics,
       ),
     );
   }

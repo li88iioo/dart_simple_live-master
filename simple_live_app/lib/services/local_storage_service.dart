@@ -246,6 +246,178 @@ class LocalStorageService extends GetxService {
   /// 开启关注列表快照
   static const String kFollowSnapshotEnable = "FollowSnapshotEnable";
 
+  /// 可安全导入导出的用户设置 Schema。
+  ///
+  /// 账号凭据、WebDAV 连接信息、同步游标、数据库迁移版本和运行时缓存
+  /// 不在此列表中，因此不会通过通用配置文件或“设置”同步被复制。
+  static const Map<String, StorageConfigValueType> transferableConfigSchema = {
+    kFirstRun: StorageConfigValueType.boolean,
+    kPlayerScaleMode: StorageConfigValueType.integer,
+    kSiteSort: StorageConfigValueType.string,
+    kHomeSort: StorageConfigValueType.string,
+    kThemeMode: StorageConfigValueType.integer,
+    kDebugModeKey: StorageConfigValueType.boolean,
+    kDanmuSize: StorageConfigValueType.decimal,
+    kDanmuSpeed: StorageConfigValueType.decimal,
+    kDanmuArea: StorageConfigValueType.decimal,
+    kDanmuOpacity: StorageConfigValueType.decimal,
+    kDanmuStrokeWidth: StorageConfigValueType.decimal,
+    kDanmuHideScroll: StorageConfigValueType.boolean,
+    kDanmuHideBottom: StorageConfigValueType.boolean,
+    kDanmuHideTop: StorageConfigValueType.boolean,
+    kDanmuTopMargin: StorageConfigValueType.decimal,
+    kDanmuBottomMargin: StorageConfigValueType.decimal,
+    kDanmuEnable: StorageConfigValueType.boolean,
+    kHuyaGiftDanmakuEnable: StorageConfigValueType.boolean,
+    kDanmakuMaskEnable: StorageConfigValueType.boolean,
+    kDanmuFontWeight: StorageConfigValueType.integer,
+    kDanmuTextNormalization: StorageConfigValueType.boolean,
+    kDanmuWindowMs: StorageConfigValueType.integer,
+    kDanmuFrequencyControl: StorageConfigValueType.boolean,
+    kDanmuMaxFrequency: StorageConfigValueType.integer,
+    kHardwareDecode: StorageConfigValueType.boolean,
+    kChatTextSize: StorageConfigValueType.decimal,
+    kChatTextGap: StorageConfigValueType.decimal,
+    kChatBubbleStyle: StorageConfigValueType.boolean,
+    kQualityLevel: StorageConfigValueType.integer,
+    kQualityLevelCellular: StorageConfigValueType.integer,
+    kAutoExitEnable: StorageConfigValueType.boolean,
+    kAutoExitDuration: StorageConfigValueType.integer,
+    kRoomAutoExitDuration: StorageConfigValueType.integer,
+    kPlayerCompatMode: StorageConfigValueType.boolean,
+    kPlayerAutoPause: StorageConfigValueType.boolean,
+    kPlayerBufferSize: StorageConfigValueType.integer,
+    kPlayerForceHttps: StorageConfigValueType.boolean,
+    kDouyinHlsFirst: StorageConfigValueType.boolean,
+    kAutoFullScreen: StorageConfigValueType.boolean,
+    kPlayerVolume: StorageConfigValueType.decimal,
+    kPIPHideDanmu: StorageConfigValueType.boolean,
+    kStyleColor: StorageConfigValueType.integer,
+    kIsDynamic: StorageConfigValueType.boolean,
+    kGlassMode: StorageConfigValueType.integer,
+    kBackgroundSource: StorageConfigValueType.string,
+    kBackgroundPresetId: StorageConfigValueType.string,
+    kCustomBackgroundColor: StorageConfigValueType.integer,
+    kCustomFont: StorageConfigValueType.string,
+    kBilibiliLoginTip: StorageConfigValueType.boolean,
+    kLogEnable: StorageConfigValueType.boolean,
+    kFirebaseEnable: StorageConfigValueType.boolean,
+    kCustomPlayerOutput: StorageConfigValueType.boolean,
+    kVideoOutputDriver: StorageConfigValueType.string,
+    kVideoHardwareDecoder: StorageConfigValueType.string,
+    kAudioOutputDriver: StorageConfigValueType.string,
+    kVideoDoubleBuffering: StorageConfigValueType.boolean,
+    kAutoUpdateFollowEnable: StorageConfigValueType.boolean,
+    kUpdateFollowDuration: StorageConfigValueType.integer,
+    kUpdateFollowThreadCount: StorageConfigValueType.integer,
+    kWindowX: StorageConfigValueType.decimal,
+    kWindowY: StorageConfigValueType.decimal,
+    kWindowWidth: StorageConfigValueType.decimal,
+    kWindowHeight: StorageConfigValueType.decimal,
+    kFollowSortMethod: StorageConfigValueType.string,
+    kFollowStyleNotGrid: StorageConfigValueType.boolean,
+    kHideOfflineFollow: StorageConfigValueType.boolean,
+    kHideRemoveFollow: StorageConfigValueType.boolean,
+    kHuyaSdkUa: StorageConfigValueType.string,
+    kFollowSnapshotEnable: StorageConfigValueType.boolean,
+  };
+
+  static const Set<String> _explicitSensitiveKeys = {
+    kBilibiliCookie,
+    kDouyinCookie,
+    kWebDAVUri,
+    kWebDAVUser,
+    kWebDAVPassword,
+  };
+
+  static const int _maxTransferStringLength = 8192;
+  static const int _maxLoggedValueLength = 160;
+  static const int _maxLoggedKeyLength = 80;
+
+  static bool isSensitiveKey(Object? key) {
+    final normalized = key?.toString().toLowerCase() ?? '';
+    if (_explicitSensitiveKeys.contains(key)) return true;
+    return const [
+      'cookie',
+      'password',
+      'passwd',
+      'token',
+      'secret',
+      'authorization',
+      'credential',
+      'session',
+    ].any(normalized.contains);
+  }
+
+  static bool isTransferableConfigKey(Object? key) =>
+      key is String && transferableConfigSchema.containsKey(key);
+
+  static Map<String, dynamic> filterTransferableConfig(
+    Map<dynamic, dynamic> source, {
+    bool strict = false,
+  }) {
+    final result = <String, dynamic>{};
+    for (final entry in source.entries) {
+      final key = entry.key;
+      if (key is! String || !isTransferableConfigKey(key)) continue;
+      try {
+        result[key] = normalizeTransferableConfigValue(key, entry.value);
+      } on FormatException {
+        if (strict) rethrow;
+      }
+    }
+    return result;
+  }
+
+  static dynamic normalizeTransferableConfigValue(String key, dynamic value) {
+    final valueType = transferableConfigSchema[key];
+    if (valueType == null) {
+      throw FormatException('不允许导入设置项：$key');
+    }
+    switch (valueType) {
+      case StorageConfigValueType.boolean:
+        if (value is bool) return value;
+        break;
+      case StorageConfigValueType.integer:
+        if (value is int) return value;
+        break;
+      case StorageConfigValueType.decimal:
+        if (value is num && value.isFinite) return value.toDouble();
+        break;
+      case StorageConfigValueType.string:
+        if (value is String && value.length <= _maxTransferStringLength) {
+          return value;
+        }
+        break;
+    }
+    throw FormatException('设置项 $key 的类型或长度无效');
+  }
+
+  static String logKey(Object? key) => _truncateLogText(
+      _escapeLogText(key?.toString() ?? '<null>'), _maxLoggedKeyLength);
+
+  static String logValue(Object? key, Object? value) {
+    if (isSensitiveKey(key)) return '<redacted>';
+    if (value is Map) return '${value.runtimeType}(length: ${value.length})';
+    if (value is Iterable && value is! String) {
+      return '${value.runtimeType}(length: ${value.length})';
+    }
+    return _truncateLogText(
+      _escapeLogText(value?.toString() ?? 'null'),
+      _maxLoggedValueLength,
+    );
+  }
+
+  static String _escapeLogText(String value) => value
+      .replaceAll('\r', r'\r')
+      .replaceAll('\n', r'\n')
+      .replaceAll('\t', r'\t');
+
+  static String _truncateLogText(String value, int maxLength) {
+    if (value.length <= maxLength) return value;
+    return '${value.substring(0, maxLength)}…(${value.length} chars)';
+  }
+
   late Box settingsBox;
   late Box<String> shieldBox;
 
@@ -267,7 +439,7 @@ class LocalStorageService extends GetxService {
   T getValue<T>(dynamic key, T defaultValue) {
     try {
       var value = settingsBox.get(key, defaultValue: defaultValue) as T;
-      Log.d("Get LocalStorage：$key\r\n$value");
+      Log.d("Get LocalStorage：${logKey(key)}\r\n${logValue(key, value)}");
       return value;
     } catch (e) {
       Log.logPrint(e);
@@ -278,7 +450,7 @@ class LocalStorageService extends GetxService {
   T? getNullValue<T>(dynamic key, T? defaultValue) {
     try {
       var value = settingsBox.get(key, defaultValue: defaultValue) as T?;
-      Log.d("Get LocalStorage：$key\r\n$value");
+      Log.d("Get LocalStorage：${logKey(key)}\r\n${logValue(key, value)}");
       return value;
     } catch (e) {
       Log.logPrint(e);
@@ -287,16 +459,23 @@ class LocalStorageService extends GetxService {
   }
 
   Future setValue<T>(dynamic key, T value) async {
-    Log.d("Set LocalStorage：$key\r\n$value");
+    Log.d("Set LocalStorage：${logKey(key)}\r\n${logValue(key, value)}");
     return await settingsBox.put(key, value);
   }
 
   Future removeValue<T>(dynamic key) async {
-    Log.d("Remove LocalStorage：$key");
+    Log.d("Remove LocalStorage：${logKey(key)}");
     return await settingsBox.delete(key);
   }
 
   Future flush() async {
     return await settingsBox.flush();
   }
+}
+
+enum StorageConfigValueType {
+  boolean,
+  integer,
+  decimal,
+  string,
 }

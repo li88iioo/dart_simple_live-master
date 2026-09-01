@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_easyrefresh/easy_refresh.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/modules/category/category_list_controller.dart';
@@ -7,6 +6,7 @@ import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/widgets/glass/slive_glass_surface.dart';
 import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
+import 'package:simple_live_app/widgets/page_grid_view.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
 class CategoryListView extends StatelessWidget {
@@ -30,16 +30,14 @@ class CategoryListView extends StatelessWidget {
     return KeepAliveWrapper(
       child: ColoredBox(
         color: Colors.transparent,
-        child: Obx(
-          () => EasyRefresh(
-            firstRefresh: false,
-            controller: controller.easyRefreshController,
-            onRefresh: controller.refreshData,
-            header: MaterialHeader(
-              completeDuration: const Duration(milliseconds: 400),
-            ),
-            child: ListView.builder(
+        child: SliveNativeRefreshView(
+          onRefresh: () async {
+            await controller.refreshData();
+          },
+          child: Obx(
+            () => ListView.builder(
               controller: controller.scrollController,
+              physics: slivePlatformScrollPhysics,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.fromLTRB(
                 SliveLayout.pageHorizontal,
@@ -50,12 +48,16 @@ class CategoryListView extends StatelessWidget {
               itemCount: controller.list.length,
               itemBuilder: (context, index) {
                 final category = controller.list[index];
-                return Obx(
-                  () => _CategorySectionCard(
+                return Obx(() {
+                  final visibleChildren = category.visibleChildren;
+                  return _CategorySectionCard(
                     key: ValueKey('${controller.site.id}-${category.id}'),
                     category: category,
                     siteId: controller.site.id,
-                    expanded: category.showAll.value,
+                    visibleChildren: visibleChildren,
+                    expanded: category.isExpanded,
+                    hasMore: category.hasMore,
+                    remainingCount: category.remainingCount,
                     onSubCategoryTap: (subCategory) {
                       AppNavigator.toCategoryDetail(
                         site: controller.site,
@@ -63,8 +65,8 @@ class CategoryListView extends StatelessWidget {
                       );
                     },
                     onToggleExpanded: category.toggleExpanded,
-                  ),
-                );
+                  );
+                });
               },
             ),
           ),
@@ -79,14 +81,20 @@ class _CategorySectionCard extends StatelessWidget {
     super.key,
     required this.category,
     required this.siteId,
+    required this.visibleChildren,
     required this.expanded,
+    required this.hasMore,
+    required this.remainingCount,
     required this.onSubCategoryTap,
     required this.onToggleExpanded,
   });
 
   final AppLiveCategory category;
   final String siteId;
+  final List<LiveSubCategory> visibleChildren;
   final bool expanded;
+  final bool hasMore;
+  final int remainingCount;
   final ValueChanged<LiveSubCategory> onSubCategoryTap;
   final VoidCallback onToggleExpanded;
 
@@ -95,7 +103,6 @@ class _CategorySectionCard extends StatelessWidget {
     final colors = context.sliveColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final accent = colors.platform(siteId);
-    final visibleChildren = category.visibleChildren;
     final cardColor = Color.alphaBlend(
       accent.withValues(alpha: isDark ? 0.075 : 0.045),
       colors.glassBase,
@@ -151,7 +158,8 @@ class _CategorySectionCard extends StatelessWidget {
             const SizedBox(height: 14),
             _ExpandCategoryButton(
               expanded: expanded,
-              remainingCount: category.remainingCount,
+              hasMore: hasMore,
+              remainingCount: remainingCount,
               accent: accent,
               onTap: onToggleExpanded,
             ),
@@ -337,12 +345,14 @@ class _SubCategoryTile extends StatelessWidget {
 class _ExpandCategoryButton extends StatelessWidget {
   const _ExpandCategoryButton({
     required this.expanded,
+    required this.hasMore,
     required this.remainingCount,
     required this.accent,
     required this.onTap,
   });
 
   final bool expanded;
+  final bool hasMore;
   final int remainingCount;
   final Color accent;
   final VoidCallback onTap;
@@ -352,12 +362,14 @@ class _ExpandCategoryButton extends StatelessWidget {
     final colors = context.sliveColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final label = expanded ? '收起' : '显示全部';
+    final label = hasMore ? (expanded ? '继续显示' : '显示更多') : '收起';
+    final semanticsLabel = hasMore ? '$label分类，还剩$remainingCount项' : '收起分类';
 
     return Semantics(
       button: true,
       expanded: expanded,
-      label: expanded ? '收起${remainingCount + 15}个分类' : '显示全部分类',
+      label: semanticsLabel,
+      onTap: onTap,
       child: SizedBox(
         width: double.infinity,
         height: SliveLayout.minimumTouchTarget,
@@ -389,7 +401,7 @@ class _ExpandCategoryButton extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                   ),
-                  if (!expanded) ...[
+                  if (hasMore) ...[
                     const SizedBox(width: 5),
                     Text(
                       '+$remainingCount',
@@ -404,7 +416,7 @@ class _ExpandCategoryButton extends StatelessWidget {
                   ],
                   const SizedBox(width: 6),
                   AnimatedRotation(
-                    turns: expanded ? 0.5 : 0,
+                    turns: hasMore ? 0 : 0.5,
                     duration:
                         reduceMotion ? Duration.zero : SliveMotion.selection,
                     curve: SliveMotion.standard,

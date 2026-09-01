@@ -48,10 +48,13 @@ class _HomeListViewState extends State<HomeListView> {
         final gridWidth =
             constraints.maxWidth - horizontalPadding - gap * (columnCount - 1);
         final cardWidth = gridWidth / columnCount;
-        final coverLogicalWidth = cardWidth - 10;
-        final textScale = mediaQuery.textScaler.scale(1).clamp(1.0, 1.5);
-        final mainAxisExtent =
-            (coverLogicalWidth * 2 / 3) + 59 + ((textScale - 1) * 30);
+        final mainAxisExtent = LiveRoomCard.resolveMainAxisExtent(
+          cardWidth: cardWidth,
+          textScaler: mediaQuery.textScaler.clamp(
+            minScaleFactor: 1,
+            maxScaleFactor: 1.5,
+          ),
+        );
 
         return KeepAliveWrapper(
           child: PageGridView(

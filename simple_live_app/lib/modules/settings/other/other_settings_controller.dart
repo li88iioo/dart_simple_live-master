@@ -159,22 +159,16 @@ class OtherSettingsController extends BaseController {
 
   void exportConfig() async {
     try {
-      // 组装数据
-      var data = {
-        "type": "simple_live",
-        "platform": Platform.operatingSystem,
-        "version": 1,
-        "time": DateTime.now().millisecondsSinceEpoch,
-        "config": LocalStorageService.instance.settingsBox.toMap(),
-        "shield": LocalStorageService.instance.shieldBox.toMap(),
-      };
+      final data = ConfigTransferCodec.createDocument(
+        platform: Platform.operatingSystem,
+        time: DateTime.now().millisecondsSinceEpoch,
+        settings: LocalStorageService.instance.settingsBox.toMap(),
+        shield: LocalStorageService.instance.shieldBox.toMap(),
+      );
+      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(data)));
 
-      var bytes = Uint8List.fromList(utf8.encode(jsonEncode(data)));
-
-      // FilePicker 直接写入
-      var inlineSave = Platform.isAndroid || Platform.isIOS || kIsWeb;
-
-      var path = await FilePicker.platform.saveFile(
+      final inlineSave = Platform.isAndroid || Platform.isIOS || kIsWeb;
+      final path = await FilePicker.platform.saveFile(
         allowedExtensions: ['json'],
         type: FileType.custom,
         fileName: "simple_live_config.json",
@@ -185,72 +179,50 @@ class OtherSettingsController extends BaseController {
         SmartDialog.showToast("保存取消");
         return;
       }
-
-      // 桌面平台需要手动写入
       if (!inlineSave && path != null) {
         await File(path).writeAsBytes(bytes);
       }
-
       SmartDialog.showToast("保存成功");
-    } catch (e) {
-      Log.logPrint(e);
+    } catch (e, s) {
+      Log.e("导出配置失败：$e", s);
       SmartDialog.showToast("导出失败:$e");
     }
   }
 
   void importConfig() async {
     try {
-      var file = await FilePicker.platform.pickFiles(
+      final file = await FilePicker.platform.pickFiles(
         allowedExtensions: ['json'],
         type: FileType.custom,
       );
-      if (file == null) {
-        return;
-      }
-      var filePath = file.files.single.path!;
-      var data = jsonDecode(await File(filePath).readAsString());
-      if (data["type"] != "simple_live") {
-        SmartDialog.showToast("不支持的配置文件");
-        return;
-      }
-      // 检查platform
-      if (data["platform"] != Platform.operatingSystem &&
-          !await Utils.showAlertDialog("导入配置文件平台不匹配,是否继续导入?", title: "平台不匹配")) {
-        return;
-      }
-      final config = Map<dynamic, dynamic>.from(data["config"] as Map);
-      final rawShield = Map<dynamic, dynamic>.from(data["shield"] as Map);
-      if (rawShield.values.any((value) => value is! String)) {
-        throw const FormatException("屏蔽词配置格式无效");
-      }
-      final shield = {
-        for (final value in rawShield.values.cast<String>()) value: value,
-      };
-      await LocalStorageService.instance.synchronizedWrite(() async {
-        final settingsBox = LocalStorageService.instance.settingsBox;
-        final shieldBox = LocalStorageService.instance.shieldBox;
+      if (file == null) return;
 
-        if (config.isNotEmpty) {
-          await settingsBox.putAll(config);
-        }
-        if (shield.isNotEmpty) {
-          await shieldBox.putAll(shield);
-        }
+      final filePath = file.files.single.path;
+      if (filePath == null) {
+        throw const FormatException("无法读取配置文件路径");
+      }
+      final configFile = File(filePath);
+      if (await configFile.length() > ConfigTransferCodec.maxDocumentBytes) {
+        throw const FormatException("配置文件过大");
+      }
+      final rawText = await configFile.readAsString();
+      final payload = ConfigTransferCodec.decode(jsonDecode(rawText));
 
-        final staleShieldKeys =
-            shieldBox.keys.where((key) => !shield.containsKey(key)).toList();
-        if (staleShieldKeys.isNotEmpty) {
-          await shieldBox.deleteAll(staleShieldKeys);
-        }
-        final staleSettingKeys =
-            settingsBox.keys.where((key) => !config.containsKey(key)).toList();
-        if (staleSettingKeys.isNotEmpty) {
-          await settingsBox.deleteAll(staleSettingKeys);
-        }
-      });
-      SmartDialog.showToast("导入成功,重启生效");
-    } catch (e) {
-      Log.logPrint(e);
+      if (payload.platform != Platform.operatingSystem &&
+          !await Utils.showAlertDialog(
+            "导入配置文件平台不匹配,是否继续导入?",
+            title: "平台不匹配",
+          )) {
+        return;
+      }
+
+      await ConfigTransferCodec.apply(
+        LocalStorageService.instance,
+        payload,
+      );
+      SmartDialog.showToast("导入成功,已忽略账号凭据和内部状态,重启生效");
+    } catch (e, s) {
+      Log.e("导入配置失败：$e", s);
       SmartDialog.showToast("导入失败:$e");
     }
   }
@@ -264,6 +236,145 @@ class OtherSettingsController extends BaseController {
       await LocalStorageService.instance.shieldBox.clear();
     });
     SmartDialog.showToast("重置成功,重启生效");
+  }
+}
+
+class ConfigTransferPayload {
+  const ConfigTransferPayload({
+    required this.platform,
+    required this.config,
+    required this.shield,
+  });
+
+  final String platform;
+  final Map<String, dynamic> config;
+  final Map<String, String> shield;
+}
+
+class ConfigTransferCodec {
+  static const int currentVersion = 2;
+  static const int maxDocumentBytes = 2 * 1024 * 1024;
+  static const int maxConfigEntries = 256;
+  static const int maxShieldEntries = 5000;
+  static const int maxShieldTextLength = 4096;
+
+  static Map<String, dynamic> createDocument({
+    required String platform,
+    required int time,
+    required Map<dynamic, dynamic> settings,
+    required Map<dynamic, dynamic> shield,
+  }) {
+    return {
+      'type': 'simple_live',
+      'platform': _validatePlatform(platform),
+      'version': currentVersion,
+      'time': time,
+      'config': LocalStorageService.filterTransferableConfig(settings),
+      'shield': _normalizeShield(shield),
+    };
+  }
+
+  static ConfigTransferPayload decode(Object? document) {
+    if (document is! Map) {
+      throw const FormatException('配置文件根节点必须是对象');
+    }
+    if (document['type'] != 'simple_live') {
+      throw const FormatException('不支持的配置文件');
+    }
+
+    final version = document['version'];
+    if (version is! int || version < 1 || version > currentVersion) {
+      throw const FormatException('配置文件版本不受支持');
+    }
+    final time = document['time'];
+    if (time is! int || time < 0) {
+      throw const FormatException('配置文件时间字段无效');
+    }
+
+    final rawConfig = document['config'];
+    final rawShield = document['shield'];
+    if (rawConfig is! Map || rawShield is! Map) {
+      throw const FormatException('配置文件数据结构无效');
+    }
+    if (rawConfig.length > maxConfigEntries) {
+      throw const FormatException('配置项数量过多');
+    }
+
+    return ConfigTransferPayload(
+      platform: _validatePlatform(document['platform']),
+      config: LocalStorageService.filterTransferableConfig(
+        rawConfig,
+        strict: true,
+      ),
+      shield: _normalizeShield(rawShield, strict: true),
+    );
+  }
+
+  static Future<void> apply(
+    LocalStorageService storage,
+    ConfigTransferPayload payload,
+  ) {
+    return storage.synchronizedWrite(() async {
+      final settingsBox = storage.settingsBox;
+      final shieldBox = storage.shieldBox;
+
+      if (payload.config.isNotEmpty) {
+        await settingsBox.putAll(payload.config);
+      }
+      if (payload.shield.isNotEmpty) {
+        await shieldBox.putAll(payload.shield);
+      }
+
+      final staleShieldKeys = shieldBox.keys
+          .where((key) => !payload.shield.containsKey(key))
+          .toList();
+      if (staleShieldKeys.isNotEmpty) {
+        await shieldBox.deleteAll(staleShieldKeys);
+      }
+
+      // 只清理可迁移的用户设置。账号凭据、WebDAV 状态、数据库版本及
+      // 未知的未来字段均保持原值，避免配置导入越权覆盖内部状态。
+      final staleSettingKeys = LocalStorageService.transferableConfigSchema.keys
+          .where(
+            (key) =>
+                settingsBox.containsKey(key) &&
+                !payload.config.containsKey(key),
+          )
+          .toList();
+      if (staleSettingKeys.isNotEmpty) {
+        await settingsBox.deleteAll(staleSettingKeys);
+      }
+    });
+  }
+
+  static String _validatePlatform(Object? platform) {
+    if (platform is! String || platform.isEmpty || platform.length > 64) {
+      throw const FormatException('配置文件平台字段无效');
+    }
+    return platform;
+  }
+
+  static Map<String, String> _normalizeShield(
+    Map<dynamic, dynamic> source, {
+    bool strict = false,
+  }) {
+    if (source.length > maxShieldEntries) {
+      throw const FormatException('屏蔽词数量过多');
+    }
+
+    final result = <String, String>{};
+    for (final value in source.values) {
+      if (value is! String ||
+          value.isEmpty ||
+          value.length > maxShieldTextLength) {
+        if (strict) {
+          throw const FormatException('屏蔽词配置格式无效');
+        }
+        continue;
+      }
+      result[value] = value;
+    }
+    return result;
   }
 }
 

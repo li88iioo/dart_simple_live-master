@@ -1,6 +1,6 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.util.Properties
 import java.io.FileInputStream
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -18,6 +18,20 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+
+val requiredReleaseSigningProperties =
+    listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val missingReleaseSigningProperties =
+    requiredReleaseSigningProperties.filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+val releaseStoreFile =
+    keystoreProperties
+        .getProperty("storeFile")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { file(it) }
+val hasReleaseSigningConfig =
+    keystorePropertiesFile.isFile &&
+        missingReleaseSigningProperties.isEmpty() &&
+        releaseStoreFile?.isFile == true
 
 android {
     namespace = "com.slotsun.slive"
@@ -47,21 +61,21 @@ android {
     }
 
     signingConfigs {
-        val hasKey = keystorePropertiesFile.exists() && keystoreProperties.containsKey("keyAlias")
-        if (hasKey) {
+        if (hasReleaseSigningConfig) {
             create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = releaseStoreFile
+                storePassword = keystoreProperties.getProperty("storePassword")
             }
         }
     }
 
     buildTypes {
         release {
-            val hasKey = keystorePropertiesFile.exists() && keystoreProperties.containsKey("keyAlias")
-            signingConfig = if (hasKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -74,4 +88,38 @@ android {
 
 flutter {
     source = "../.."
+}
+
+val validateReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Fails release packaging when a complete release signing configuration is unavailable."
+
+    doLast {
+        if (hasReleaseSigningConfig) return@doLast
+
+        val reasons = buildList {
+            if (!keystorePropertiesFile.isFile) {
+                add("missing ${keystorePropertiesFile.path}")
+            }
+            if (missingReleaseSigningProperties.isNotEmpty()) {
+                add("missing properties: ${missingReleaseSigningProperties.joinToString()}")
+            }
+            if (releaseStoreFile != null && !releaseStoreFile.isFile) {
+                add("keystore file does not exist: ${releaseStoreFile.path}")
+            }
+        }
+        throw GradleException(
+            "Release signing is required; refusing to build a release artifact with a debug or unsigned key " +
+                "(${reasons.joinToString("; ")})."
+        )
+    }
+}
+
+val releasePackagingTaskPattern =
+    Regex("^(assemble|bundle|package|install).*Release.*$", RegexOption.IGNORE_CASE)
+
+tasks.configureEach {
+    if (releasePackagingTaskPattern.matches(name)) {
+        dependsOn(validateReleaseSigning)
+    }
 }

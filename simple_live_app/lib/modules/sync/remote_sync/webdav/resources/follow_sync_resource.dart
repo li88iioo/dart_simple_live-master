@@ -23,7 +23,10 @@ class FollowBundle {
         tags = tags ?? [];
 }
 
-class FollowSyncResource implements SyncResource<FollowBundle> {
+class FollowSyncResource
+    implements
+        SyncResource<FollowBundle>,
+        InitialBidirectionalSyncResource<FollowBundle> {
   @override
   String get fileName => "SimpleLive_follows.json";
 
@@ -93,6 +96,18 @@ class FollowSyncResource implements SyncResource<FollowBundle> {
         tagBytes.length,
         tagBytes,
       ),
+    );
+  }
+
+  @override
+  FollowBundle prepareInitialBidirectional(FollowBundle local) {
+    return FollowBundle(
+      follows: local.follows.map((item) {
+        final snapshot = _copyFollow(item);
+        snapshot.syncDuration = 0;
+        return snapshot;
+      }).toList(growable: false),
+      tags: List<FollowUserTag>.of(local.tags),
     );
   }
 
@@ -186,13 +201,20 @@ class FollowSyncResource implements SyncResource<FollowBundle> {
           }
         } else {
           // 两边都是正常记录，合并观看时长
-          localItem.watchDurationSec =
-              (remoteItem.watchDuration ?? "00:00:00").toDuration().inSeconds +
-                  localItem.syncDuration;
-          localItem.watchDuration =
-              Duration(seconds: localItem.watchDurationSec).toHMSString();
-          localItem.syncDuration = 0;
-          result[localItem.id] = localItem;
+          final merged = _copyFollow(localItem);
+          final remoteSeconds =
+              (remoteItem.watchDuration ?? "00:00:00").toDuration().inSeconds;
+          final localSeconds =
+              (localItem.watchDuration ?? "00:00:00").toDuration().inSeconds;
+          // 上次远端上传成功但本地清零失败时，两端总时长已一致，残留的
+          // syncDuration 不能再次叠加。
+          merged.watchDurationSec = localSeconds == remoteSeconds
+              ? remoteSeconds
+              : remoteSeconds + localItem.syncDuration;
+          merged.watchDuration =
+              Duration(seconds: merged.watchDurationSec).toHMSString();
+          merged.syncDuration = 0;
+          result[localItem.id] = merged;
         }
       } else {
         // 仅本地有记录
@@ -202,7 +224,9 @@ class FollowSyncResource implements SyncResource<FollowBundle> {
         } else {
           // 本地是正常记录，如果添加时间在上次同步之后，保留
           if (localItem.addTime.isAfter(curLast)) {
-            result[localItem.id] = localItem;
+            final snapshot = _copyFollow(localItem);
+            snapshot.syncDuration = 0;
+            result[localItem.id] = snapshot;
           }
         }
       }
@@ -224,4 +248,6 @@ class FollowSyncResource implements SyncResource<FollowBundle> {
     }
     return result.values.toList();
   }
+
+  FollowUser _copyFollow(FollowUser item) => FollowUser.fromJson(item.toJson());
 }

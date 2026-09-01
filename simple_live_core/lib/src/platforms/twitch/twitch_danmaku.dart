@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:simple_live_core/simple_live_core.dart';
@@ -33,6 +33,7 @@ class TwitchDanmaku implements LiveDanmaku {
     webScoketUtils = WebScoketUtils(
       url: serverUrl,
       heartBeatTime: heartbeatTime,
+      readTimeout: const Duration(minutes: 6),
       onMessage: (e) {
         decodeMessage(e);
       },
@@ -55,12 +56,14 @@ class TwitchDanmaku implements LiveDanmaku {
 
   void joinRoom(String roomId) {
     var user = "justinfan${1000 + Random().nextInt(99999 - 1000 + 1)}";
-    webScoketUtils?..sendMessage(
-        "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership")..sendMessage(
-        "PASS SCHMOOPIIE")..sendMessage("NICK $user")..sendMessage(
-        "USER $user 8 * :$user")..sendMessage("JOIN #$roomId");
+    webScoketUtils
+      ?..sendMessage(
+          "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership")
+      ..sendMessage("PASS SCHMOOPIIE")
+      ..sendMessage("NICK $user")
+      ..sendMessage("USER $user 8 * :$user")
+      ..sendMessage("JOIN #$roomId");
   }
-
 
   @override
   Future stop() async {

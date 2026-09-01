@@ -60,10 +60,12 @@ class MigrationService {
         .getValue(LocalStorageService.kHiveDbVer, 10708);
     Log.i("curDBVer: $curDBVer, curAppVer: $curAppVer");
     if (curDBVer <= 10708) {
-      LocalStorageService.instance.settingsBox
-          .delete(LocalStorageService.kWebDAVLastUploadTime);
-      LocalStorageService.instance.settingsBox
-          .delete(LocalStorageService.kWebDAVLastRecoverTime);
+      await Future.wait<void>([
+        LocalStorageService.instance.settingsBox
+            .delete(LocalStorageService.kWebDAVLastUploadTime),
+        LocalStorageService.instance.settingsBox
+            .delete(LocalStorageService.kWebDAVLastRecoverTime),
+      ]);
     }
     // follow_user 添加 tag属性
     // 从followUserTag 读取 标签
@@ -75,7 +77,7 @@ class MigrationService {
         for (FollowUserTag tag in tagList) {
           if (tag.userId.contains(followList[i].id)) {
             followList[i].tag = tag.tag;
-            DBService.instance.addFollow(followList[i]);
+            await DBService.instance.addFollow(followList[i]);
             break;
           }
         }
@@ -83,20 +85,21 @@ class MigrationService {
     }
     // sortkey-romanName
     if (curDBVer <= 10805) {
-       await FollowService.instance.followUserAllDataCheck();
+      await FollowService.instance.followUserAllDataCheck();
     }
 
     // migrate follow.watchDuration -> follow.watchDurationSec
     // easy to calculate
     // delete this attribute after v10810, I think
-    if(curDBVer <= 10807){
+    if (curDBVer <= 10807) {
       var followList = DBService.instance.followBox.values.toList();
       for (FollowUser follow in followList) {
-        follow.watchDurationSec = follow.watchDuration!.toDuration().inSeconds;
-        DBService.instance.addFollow(follow);
+        follow.watchDurationSec =
+            (follow.watchDuration ?? '00:00:00').toDuration().inSeconds;
+        await DBService.instance.addFollow(follow);
       }
     }
-    LocalStorageService.instance.settingsBox
+    await LocalStorageService.instance.settingsBox
         .put(LocalStorageService.kHiveDbVer, curAppVer);
   }
 }

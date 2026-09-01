@@ -25,11 +25,13 @@ class BiliBiliAccountService extends GetxService {
     cookie = LocalStorageService.instance
         .getValue(LocalStorageService.kBilibiliCookie, "");
     logined.value = cookie.isNotEmpty;
-    loadUserInfo();
+    // Cookie 是直播请求的首屏依赖，先同步应用；用户名与 UID 的网络刷新
+    // 由启动首帧之后的延迟任务完成，避免阻塞冷启动。
+    setSite();
     super.onInit();
   }
 
-  Future loadUserInfo() async {
+  Future<void> loadUserInfo() async {
     if (cookie.isEmpty) {
       return;
     }

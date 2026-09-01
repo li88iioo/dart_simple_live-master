@@ -1,4 +1,4 @@
-﻿// only for Android
+// only for Android
 import 'dart:ui';
 
 import 'package:firebase_analytics/firebase_analytics.dart';
@@ -21,13 +21,15 @@ class FirebaseService extends GetxService {
     await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(enable);
 
     if (enable) {
-      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+      FlutterError.onError =
+          FirebaseCrashlytics.instance.recordFlutterFatalError;
       PlatformDispatcher.instance.onError = (error, stack) {
         FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
         return true;
       };
-    }else{
+    } else {
       FlutterError.onError = FlutterError.dumpErrorToConsole;
+      PlatformDispatcher.instance.onError = null;
     }
   }
 }

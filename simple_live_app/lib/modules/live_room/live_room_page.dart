@@ -159,8 +159,10 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   }
 
   Widget buildPageUI() {
-    return OrientationBuilder(
-      builder: (context, orientation) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useWideLayout = constraints.maxWidth >= 1000 ||
+            constraints.maxWidth > constraints.maxHeight * 1.15;
         return SlivePageScaffold(
           appBar: AppBar(
             leadingWidth: 60,
@@ -181,9 +183,9 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ),
             actions: buildAppbarActions(context),
           ),
-          body: orientation == Orientation.portrait
-              ? buildPhoneUI(context)
-              : buildTabletUI(context),
+          body: useWideLayout
+              ? buildTabletUI(context, constraints.maxWidth)
+              : buildPhoneUI(context),
         );
       },
     );
@@ -207,7 +209,8 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     );
   }
 
-  Widget buildTabletUI(BuildContext context) {
+  Widget buildTabletUI(BuildContext context, double availableWidth) {
+    final chatWidth = (availableWidth * 0.32).clamp(280.0, 420.0);
     return Column(
       children: [
         Expanded(
@@ -218,7 +221,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 Expanded(child: _buildPlayerFrame(context)),
                 const SizedBox(width: 10),
                 SizedBox(
-                  width: 320,
+                  width: chatWidth,
                   child: Column(
                     children: [
                       buildMessageArea(
@@ -1218,6 +1221,27 @@ class _LiveRoomTabViewportState extends State<LiveRoomTabViewport>
   }
 }
 
+class LiveRoomChromeRevealSurface extends StatelessWidget {
+  const LiveRoomChromeRevealSurface({
+    super.key,
+    required this.onReveal,
+    required this.child,
+  });
+
+  final VoidCallback onReveal;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      excludeFromSemantics: true,
+      onTap: onReveal,
+      child: child,
+    );
+  }
+}
+
 class _LiveRoomMessageArea extends StatefulWidget {
   const _LiveRoomMessageArea({
     required this.controller,
@@ -1304,6 +1328,7 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
     final nextIndex = _tabController.index;
     if (_activeIndex == nextIndex) return;
     setState(() => _activeIndex = nextIndex);
+    widget.controller.setLiveRoomTabIndex(nextIndex);
     _showTabs(scheduleAutoHide: nextIndex == 0);
   }
 
@@ -1350,7 +1375,7 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
     setState(() => _bottomActionsVisible = false);
   }
 
-  void _handlePointerDown(PointerDownEvent event) {
+  void _handleSurfaceTap() {
     if (_activeIndex == 0) {
       _showTabs();
     }
@@ -1382,18 +1407,46 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
       ignoring: !visible,
       child: ExcludeSemantics(
         excluding: !visible,
-        child: AnimatedCrossFade(
-          firstChild: RepaintBoundary(child: widget.profileBuilder()),
-          secondChild: const SizedBox(width: double.infinity),
-          crossFadeState:
-              visible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+        // AnimatedSwitcher 在淡出期间保持旧子树尺寸，动画结束后才一次性
+        // 释放空间，避免 AnimatedCrossFade 每一帧改变聊天 viewport 高度。
+        child: AnimatedSwitcher(
           duration: _visibilityDuration,
-          reverseDuration: _visibilityDuration,
-          firstCurve: SliveMotion.standard,
-          secondCurve: SliveMotion.standard,
-          sizeCurve: SliveMotion.standard,
-          alignment: Alignment.topCenter,
-          excludeBottomFocus: true,
+          switchInCurve: SliveMotion.standard,
+          switchOutCurve: SliveMotion.standard,
+          layoutBuilder: (currentChild, previousChildren) {
+            return Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                ...previousChildren,
+                if (currentChild != null) currentChild,
+              ],
+            );
+          },
+          transitionBuilder: (child, animation) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: SliveMotion.standard,
+            );
+            return FadeTransition(
+              opacity: curved,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -0.08),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: child,
+              ),
+            );
+          },
+          child: visible
+              ? RepaintBoundary(
+                  key: const ValueKey('live-room-profile-visible'),
+                  child: widget.profileBuilder(),
+                )
+              : const SizedBox(
+                  key: ValueKey('live-room-profile-hidden'),
+                  width: double.infinity,
+                ),
         ),
       ),
     );
@@ -1478,9 +1531,8 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: _handlePointerDown,
+    return LiveRoomChromeRevealSurface(
+      onReveal: _handleSurfaceTap,
       child: Column(
         children: [
           _buildAutoHidingProfile(),
@@ -1490,7 +1542,8 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
               children: [
                 LiveRoomTabViewport(
                   index: _activeIndex,
-                  duration: _tabSwitchDuration,
+                  duration:
+                      _disableAnimations ? Duration.zero : _tabSwitchDuration,
                   children: _tabPages,
                 ),
                 Positioned(
@@ -1552,14 +1605,14 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
   }
 
   Widget _buildChatTab(BuildContext context) {
-    return Obx(() {
-      final gap = AppSettingsController.instance.chatTextGap.value * 2;
-      return NotificationListener<UserScrollNotification>(
-        onNotification: _handleChatScroll,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: ListView.separated(
+    return NotificationListener<UserScrollNotification>(
+      onNotification: _handleChatScroll,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Obx(() {
+              final gap = AppSettingsController.instance.chatTextGap.value * 2;
+              return ListView.separated(
                 controller: widget.controller.scrollController,
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
@@ -1573,45 +1626,49 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
                   final item = widget.controller.messages[i];
                   return widget.messageItemBuilder(context, item);
                 },
-              ),
-            ),
-            HuyaGiftDanmakuOverlay(
-              controller: widget.controller,
-              placement: HuyaGiftOverlayPlacement.chat,
-            ),
-            if (widget.controller.disableAutoScroll.value)
-              Positioned(
-                right: 12,
-                bottom: 10,
-                child: SizedBox(
-                  height: 34,
-                  child: SliveGlassSurface(
-                    variant: SliveGlassVariant.pill,
-                    enableBackdropBlur: false,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    onTap: widget.controller.resumeChatAutoScroll,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.arrow_downward_rounded, size: 14),
-                        SizedBox(width: 4),
-                        Text(
-                          '最新',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
+              );
+            }),
+          ),
+          HuyaGiftDanmakuOverlay(
+            controller: widget.controller,
+            placement: HuyaGiftOverlayPlacement.chat,
+          ),
+          Obx(
+            () => widget.controller.disableAutoScroll.value
+                ? Positioned(
+                    right: 12,
+                    bottom: 10,
+                    child: SizedBox(
+                      height: 34,
+                      child: SliveGlassSurface(
+                        key: const ValueKey('live-room-latest-button'),
+                        variant: SliveGlassVariant.pill,
+                        enableBackdropBlur: false,
+                        shadowColor: Colors.transparent,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        onTap: widget.controller.resumeChatAutoScroll,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_downward_rounded, size: 14),
+                            SizedBox(width: 4),
+                            Text(
+                              '最新',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      );
-    });
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _withTabInset(Widget child) {
@@ -1637,7 +1694,9 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
             _showTabs(scheduleAutoHide: index == 0);
           },
           indicatorSize: TabBarIndicatorSize.tab,
-          indicatorAnimation: TabIndicatorAnimation.elastic,
+          indicatorAnimation: _disableAnimations
+              ? TabIndicatorAnimation.linear
+              : TabIndicatorAnimation.elastic,
           indicatorPadding: const EdgeInsets.all(2),
           labelPadding: EdgeInsets.zero,
           dividerColor: Colors.transparent,

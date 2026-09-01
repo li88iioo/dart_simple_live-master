@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_core/src/common/http_client.dart';
+import 'package:simple_live_core/src/common/play_url_resolver.dart';
 import 'package:simple_live_core/src/model/tars/get_cdn_token_ex_req.dart';
 import 'package:simple_live_core/src/model/tars/get_cdn_token_ex_resp.dart';
 import 'package:simple_live_core/src/model/tars/types.dart';
@@ -12,7 +13,7 @@ import 'package:tars_dart/tars/net/base_tars_http.dart';
 
 class HuyaSite implements LiveSite {
   static const String baseUrl = "https://www.huya.com";
-  static const String wupUrl = "http://wup.huya.com";
+  static const String wupUrl = "https://wup.huya.com";
   static const String kUserAgent =
       "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36 Edg/117.0.0.0";
 
@@ -38,8 +39,10 @@ class HuyaSite implements LiveSite {
     };
   }
 
-  final BaseTarsHttp tupClient =
-      BaseTarsHttp("http://wup.huya.com", "liveui", headers: requestHeaders);
+  // 每次请求都使用当前 HYSDK_UA 创建客户端。账号管理页在线更新配置后，
+  // 后续 WUP token 请求可立即生效，也避免复用 Dio 可变 Content-Length。
+  BaseTarsHttp get tupClient =>
+      BaseTarsHttp(wupUrl, "liveui", headers: requestHeaders);
 
   @override
   String id = "huya";
@@ -170,27 +173,50 @@ class HuyaSite implements LiveSite {
   Future<LivePlayUrl> getPlayUrls(
       {required LiveRoomDetail detail,
       required LivePlayQuality quality}) async {
-    var ls = <String>[];
-    for (var element in quality.data["urls"]) {
-      var line = element as HuyaLineModel;
-      var url = await getPlayUrl(line, quality.data["bitRate"]);
-      ls.add(url);
-    }
+    final data = quality.data;
+    final rawLines = data is Map ? data["urls"] : null;
+    final bitRate =
+        data is Map ? int.tryParse(data["bitRate"].toString()) ?? 0 : 0;
+    final lines = rawLines is Iterable
+        ? rawLines.whereType<HuyaLineModel>().toList(growable: false)
+        : const <HuyaLineModel>[];
+
+    final urls = await resolvePlayUrls(
+      lines.map((line) => () => getPlayUrl(line, bitRate)),
+      // BaseTarsHttp 复用可变请求头，逐条执行可避免并发覆盖 Content-Length。
+      maxConcurrent: 1,
+      onError: (index, error, _) {
+        CoreLog.w('虎牙播放线路 ${lines[index].cdnType} 解析失败: $error');
+      },
+    );
     return LivePlayUrl(
-      urls: ls,
+      urls: urls,
       headers: {"user-agent": HYSDK_UA},
     );
   }
 
   Future<String> getPlayUrl(HuyaLineModel line, int bitRate) async {
-    var suffix = line.lineType == HuyaLineType.hls ? "m3u8" : "flv";
-    var antiCode = await getCndTokenInfoEx(line.streamName);
-    antiCode = buildAntiCode(line.streamName, line.presenterUid, antiCode);
-    var url = '${line.line}/${line.streamName}.$suffix?$antiCode&codec=264';
+    final baseUri = parseHttpPlayUri(line.line, requirePath: false);
+    final streamName = line.streamName.trim();
+    if (baseUri == null || streamName.isEmpty) return '';
+
+    var antiCode = await getCndTokenInfoEx(streamName);
+    antiCode = buildAntiCode(streamName, line.presenterUid, antiCode);
+    if (antiCode.trim().isEmpty) return '';
+
+    final suffix = line.lineType == HuyaLineType.hls ? 'm3u8' : 'flv';
+    final basePath = baseUri.path.endsWith('/')
+        ? baseUri.path.substring(0, baseUri.path.length - 1)
+        : baseUri.path;
+    final query = StringBuffer('$antiCode&codec=264');
     if (bitRate > 0) {
-      url += "&ratio=$bitRate";
+      query.write('&ratio=$bitRate');
     }
-    return url;
+    final result = baseUri.replace(
+      path: '$basePath/$streamName.$suffix',
+      query: query.toString(),
+    );
+    return normalizeHttpPlayUrl(result.toString()) ?? '';
   }
 
   @override

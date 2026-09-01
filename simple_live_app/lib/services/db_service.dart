@@ -117,6 +117,16 @@ class DBService extends GetxService {
     return synchronizedWrite(() => historyBox.clear());
   }
 
+  Future<void> flush() {
+    return synchronizedWrite(() async {
+      await Future.wait<void>([
+        historyBox.flush(),
+        followBox.flush(),
+        tagBox.flush(),
+      ]);
+    });
+  }
+
   Future<void> replaceFollows(Map<String, FollowUser> follows) {
     return synchronizedWrite(() => _stageExactBox(followBox, follows));
   }

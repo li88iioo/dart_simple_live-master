@@ -9,7 +9,25 @@ import 'package:simple_live_core/src/platforms/douyin/douyin_request_params.dart
 import 'package:simple_live_core/src/platforms/douyin/proto/douyin.pb.dart';
 import 'package:simple_live_core/src/platforms/douyin/xbogus.dart';
 
+const String douyinPrimaryWebSocketHost = 'webcast100-ws-web-lq.douyin.com';
+const String douyinBackupWebSocketHost = 'webcast5-ws-web-lf.douyin.com';
 
+Uri buildDouyinBackupWebSocketUri(Uri primary) {
+  if (primary.scheme != 'wss' || primary.host.isEmpty) {
+    throw ArgumentError.value(primary, 'primary', '必须是有效的 wss 地址');
+  }
+  if (primary.host == douyinBackupWebSocketHost) {
+    throw ArgumentError.value(primary, 'primary', '主地址不能与备用节点相同');
+  }
+  return primary.replace(host: douyinBackupWebSocketHost);
+}
+
+PushFrame buildDouyinAckFrame(dynamic logId, String internalExt) {
+  return PushFrame()
+    ..payloadType = 'ack'
+    ..logId = logId
+    ..payload = utf8.encode(internalExt);
+}
 
 class DouyinDanmakuArgs {
   final String webRid;
@@ -45,7 +63,7 @@ class DouyinDanmaku implements LiveDanmaku {
   Function(String msg)? onClose;
   @override
   Function()? onReady;
-  String serverUrl = "wss://webcast100-ws-web-lq.douyin.com/webcast/im/push/v2/";
+  String serverUrl = 'wss://$douyinPrimaryWebSocketHost/webcast/im/push/v2/';
   late DouyinDanmakuArgs danmakuArgs;
   WebScoketUtils? webScoketUtils;
 
@@ -91,21 +109,27 @@ class DouyinDanmaku implements LiveDanmaku {
 
     var sign = await getSignature(danmakuArgs.roomId, danmakuArgs.userId);
 
-    var url = "$uri&signature=$sign";
-    var backupUrl = url.replaceAll("webcast3-ws-web-lq", "webcast5-ws-web-lf");
+    final primaryUri = uri.replace(
+      queryParameters: {
+        ...uri.queryParameters,
+        'signature': sign,
+      },
+    );
+    final backupUri = buildDouyinBackupWebSocketUri(primaryUri);
     webScoketUtils = WebScoketUtils(
-      url: url,
-      backupUrl: backupUrl,
+      url: primaryUri.toString(),
+      backupUrl: backupUri.toString(),
       headers: {
         "User-Agent": DouyinRequestParams.kDefaultUserAgent,
         "Cookie": danmakuArgs.cookie,
         "Origin": "https://live.douyin.com"
       },
       heartBeatTime: heartbeatTime,
+      readTimeout: const Duration(seconds: 45),
       onMessage: (e) {
-        try{
+        try {
           decodeMessage(e);
-        }catch(e){
+        } catch (e) {
           CoreLog.error("douyin_danmaku_error$e");
         }
       },
@@ -185,10 +209,7 @@ class DouyinDanmaku implements LiveDanmaku {
   }
 
   void sendAck(dynamic logId, String internalExt) {
-    var obj = PushFrame();
-    obj.payloadType = 'ack';
-    obj.logId = logId;
-    obj.payloadType = internalExt;
+    final obj = buildDouyinAckFrame(logId, internalExt);
     webScoketUtils?.sendMessage(obj.writeToBuffer());
   }
 

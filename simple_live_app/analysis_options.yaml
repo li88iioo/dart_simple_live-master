@@ -12,6 +12,8 @@ analyzer:
     unintended_html_in_doc_comment: ignore
   exclude:
     - "**/frb_generated.web.dart"
+    # cargokit is a vendored build tool with its own package and analyzer rules.
+    - "rust_builder/cargokit/**"
 include: package:flutter_lints/flutter.yaml
 
 formatter:

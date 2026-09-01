@@ -24,6 +24,45 @@ class LiveRoomCard extends StatelessWidget {
   final Function()? onFollowRemove;
   final double coverMaxDecodeDensity;
 
+  static const double _outerHorizontalPadding = 5;
+  static const double _outerTopPadding = 5;
+  static const double _detailsTopPadding = 9;
+  static const double _detailsBottomPadding = 10;
+  static const double _titleFontSize = 13.5;
+  static const double _titleLineHeight = 1.2;
+  static const double _subtitleFontSize = 11.5;
+  static const double _subtitleLineHeight = 1.25;
+  static const double _textGap = 4;
+  static const double _roundingSafety = 1;
+
+  /// 首页固定高度网格使用的卡片高度。
+  ///
+  /// 文本段落会按设备像素比向上取整；若只使用理论字号乘行高，部分宽度与
+  /// DPI 组合会出现 Debug 模式底部溢出 1px。这里逐行向上取整并保留 1 个
+  /// 逻辑像素安全区，使占位尺寸与真实卡片结构保持一致。
+  static double resolveMainAxisExtent({
+    required double cardWidth,
+    required TextScaler textScaler,
+  }) {
+    final coverWidth = (cardWidth - _outerHorizontalPadding * 2)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final coverHeight = coverWidth * 2 / 3;
+    final titleHeight =
+        (textScaler.scale(_titleFontSize) * _titleLineHeight).ceilToDouble();
+    final subtitleHeight =
+        (textScaler.scale(_subtitleFontSize) * _subtitleLineHeight)
+            .ceilToDouble();
+    final detailsHeight = _outerTopPadding +
+        _detailsTopPadding +
+        titleHeight +
+        _textGap +
+        subtitleHeight +
+        _detailsBottomPadding +
+        _roundingSafety;
+    return coverHeight + detailsHeight;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.sliveColors;
@@ -38,7 +77,12 @@ class LiveRoomCard extends StatelessWidget {
       },
       onLongPress: onLongPress == null ? null : () => onLongPress?.call(),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(5, 5, 5, 0),
+        padding: const EdgeInsets.fromLTRB(
+          _outerHorizontalPadding,
+          _outerTopPadding,
+          _outerHorizontalPadding,
+          0,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -70,7 +114,12 @@ class LiveRoomCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(7, 9, 5, 10),
+              padding: const EdgeInsets.fromLTRB(
+                7,
+                _detailsTopPadding,
+                5,
+                _detailsBottomPadding,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -85,20 +134,20 @@ class LiveRoomCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: colors.textPrimary,
-                            fontSize: 13.5,
-                            height: 1.2,
+                            fontSize: _titleFontSize,
+                            height: _titleLineHeight,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.08,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: _textGap),
                         Text(
                           item.userName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            height: 1.25,
-                            fontSize: 11.5,
+                            height: _subtitleLineHeight,
+                            fontSize: _subtitleFontSize,
                             color: colors.textSecondary,
                             fontWeight: FontWeight.w500,
                           ),

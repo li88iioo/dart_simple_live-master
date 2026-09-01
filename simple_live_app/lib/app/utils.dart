@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:remixicon/remixicon.dart';
@@ -14,6 +13,7 @@ import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils/permission_handler.dart';
 import 'package:simple_live_app/requests/common_request.dart';
+import 'package:simple_live_app/services/app_shutdown_service.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 typedef TextValidate = bool Function(String text);
@@ -311,7 +311,7 @@ class Utils {
       cancel: "退出",
     );
     if (!result) {
-      exit(0);
+      await AppShutdownService.instance.requestExit();
     }
   }
 
@@ -349,9 +349,13 @@ class Utils {
   static void checkUpdate({bool showMsg = false}) async {
     try {
       int currentVer = Utils.parseVersion(packageInfo.version);
+      int currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
       CommonRequest request = CommonRequest();
       var versionInfo = await request.checkUpdate();
-      if (versionInfo.versionNum > currentVer) {
+      if (versionInfo.isNewerThan(
+        currentVersionNum: currentVer,
+        currentBuildNum: currentBuild,
+      )) {
         Get.dialog(
           AlertDialog(
             title: Text(
@@ -410,12 +414,23 @@ class Utils {
   }
 
   static int parseVersion(String version) {
-    var sp = version.split('.');
-    var num = "";
-    for (var item in sp) {
-      num = num + item.padLeft(2, '0');
+    final normalized = version.split('+').first.split('-').first.trim();
+    final parts = normalized.split('.');
+    if (parts.isEmpty || parts.length > 3) {
+      throw FormatException('无效版本号：$version');
     }
-    return int.parse(num);
+    final values = <int>[];
+    for (final part in parts) {
+      final value = int.tryParse(part);
+      if (value == null || value < 0 || value > 99) {
+        throw FormatException('无效版本号：$version');
+      }
+      values.add(value);
+    }
+    while (values.length < 3) {
+      values.add(0);
+    }
+    return values[0] * 10000 + values[1] * 100 + values[2];
   }
 
   static String onlineToString(int num) {
@@ -441,38 +456,6 @@ class Utils {
       } else {
         SmartDialog.showToast(
           "请授予相册访问权限",
-        );
-        return false;
-      }
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-
-  /// 检查文件权限
-  static Future<bool> checkStorgePermission() async {
-    try {
-      if (!Platform.isAndroid) {
-        return true;
-      }
-      Permission permission = Permission.storage;
-      var androidIndo = await deviceInfo.androidInfo;
-      if (androidIndo.version.sdkInt >= 33) {
-        permission = Permission.manageExternalStorage;
-      }
-
-      var status = await permission.status;
-      if (status == PermissionStatus.granted) {
-        return true;
-      }
-      status = await permission.request();
-      if (status.isGranted) {
-        return true;
-      } else {
-        SmartDialog.showToast(
-          "请授予文件访问权限",
         );
         return false;
       }

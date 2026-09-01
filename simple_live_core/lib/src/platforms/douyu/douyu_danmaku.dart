@@ -26,6 +26,7 @@ class DouyuDanmaku implements LiveDanmaku {
     webScoketUtils = WebScoketUtils(
       url: serverUrl,
       heartBeatTime: heartbeatTime,
+      readTimeout: const Duration(seconds: 150),
       onMessage: (e) {
         decodeMessage(e);
       },
@@ -67,18 +68,20 @@ class DouyuDanmaku implements LiveDanmaku {
   }
 
   void decodeMessage(List<int> data) {
+    for (final packet in deserializeDouyuPackets(data)) {
+      _decodeLogicalMessage(packet);
+    }
+  }
+
+  void _decodeLogicalMessage(String result) {
     try {
-      String? result = deserializeDouyu(data);
-      if (result == null) {
-        return;
-      }
-      var jsonData = sttToJObject(result);
+      final jsonData = sttToJObject(result);
+      if (jsonData is! Map) return;
 
       var type = jsonData["type"]?.toString();
-      var fans = jsonData["if"] ?? '0'.toString();
-      //斗鱼好像不会返回人气值
-      //有些直播间存在阴间弹幕，不知道什么情况
-      //只显示粉丝发言
+      var fans = jsonData["if"]?.toString() ?? '0';
+      // 斗鱼好像不会返回人气值。
+      // 有些直播间存在异常弹幕，沿用原逻辑仅显示粉丝发言。
       LiveMessage? liveMsg;
       if (type == "chatmsg" && fans == '1') {
         var col = int.tryParse(jsonData["col"].toString()) ?? 0;
@@ -100,7 +103,7 @@ class DouyuDanmaku implements LiveDanmaku {
           CoreLog.error("DouyuSuperChat-face:$e");
         }
         LiveSuperChatMessage sc = LiveSuperChatMessage(
-          // 斗鱼没有颜色 调整配色方案-偏紫色系
+          // 斗鱼没有颜色，调整配色方案为偏紫色系。
           backgroundBottomColor: "#292a60",
           backgroundColor: "#c1c1ff",
           endTime:
@@ -122,7 +125,6 @@ class DouyuDanmaku implements LiveDanmaku {
         // 高能弹幕2
         var scData = jsonData["list"][0];
         LiveSuperChatMessage sc2 = LiveSuperChatMessage(
-          // 斗鱼没有颜色 调整配色方案
           backgroundBottomColor: "#246488",
           backgroundColor: "#ffffff",
           endTime: DateTime.fromMillisecondsSinceEpoch(
@@ -143,13 +145,12 @@ class DouyuDanmaku implements LiveDanmaku {
           color: LiveMessageColor.white,
           data: sc2,
         );
-      } else if (type != "uenter") {
       }
       if (liveMsg != null) {
         onMessage?.call(liveMsg);
       }
     } catch (e) {
-      CoreLog.error("DouyuSuperChat:$e");
+      CoreLog.error("Douyu logical packet 解析失败: $e");
     }
   }
 
@@ -162,8 +163,8 @@ class DouyuDanmaku implements LiveDanmaku {
       List<int> buffer = utf8.encode(body);
 
       var writer = BinaryWriter([]);
-      writer.writeInt(4 + 4 + body.length + 1, 4, endian: Endian.little);
-      writer.writeInt(4 + 4 + body.length + 1, 4, endian: Endian.little);
+      writer.writeInt(4 + 4 + buffer.length + 1, 4, endian: Endian.little);
+      writer.writeInt(4 + 4 + buffer.length + 1, 4, endian: Endian.little);
       writer.writeInt(clientSendToServer, 2, endian: Endian.little);
       writer.writeInt(encrypted, 1, endian: Endian.little);
       writer.writeInt(reserved, 1, endian: Endian.little);
@@ -177,24 +178,63 @@ class DouyuDanmaku implements LiveDanmaku {
   }
 
   String? deserializeDouyu(List<int> buffer) {
-    try {
-      var reader = BinaryReader(Uint8List.fromList(buffer));
-      int fullMsgLength =
-          reader.readInt32(endian: Endian.little); //fullMsgLength
-      reader.readInt32(endian: Endian.little); //fullMsgLength2
-      int bodyLength = fullMsgLength - 9;
-      reader.readShort(endian: Endian.little); //packType
-      reader.readByte(endian: Endian.little); //encrypted
-      reader.readByte(endian: Endian.little); //reserved
+    final packets = deserializeDouyuPackets(buffer);
+    return packets.isEmpty ? null : packets.first;
+  }
 
-      var bytes = reader.readBytes(bodyLength);
+  List<String> deserializeDouyuPackets(List<int> buffer) {
+    const minimumPacketLength = 13;
+    final data = Uint8List.fromList(buffer);
+    final packets = <String>[];
+    var offset = 0;
 
-      reader.readByte(endian: Endian.little); //固定为0
-      return utf8.decode(bytes);
-    } catch (e) {
-      CoreLog.error(e);
-      return null;
+    while (offset < data.length) {
+      final remaining = data.length - offset;
+      if (remaining < minimumPacketLength) {
+        CoreLog.w('Douyu frame 尾部不足一个完整包: remaining=$remaining');
+        break;
+      }
+
+      final header = ByteData.sublistView(data, offset, offset + 12);
+      final fullMessageLength = header.getUint32(0, Endian.little);
+      final repeatedLength = header.getUint32(4, Endian.little);
+      if (fullMessageLength != repeatedLength || fullMessageLength < 9) {
+        CoreLog.w(
+          'Douyu 包长度非法: first=$fullMessageLength, '
+          'second=$repeatedLength',
+        );
+        break;
+      }
+
+      final packetLength = fullMessageLength + 4;
+      if (packetLength > remaining) {
+        CoreLog.w(
+          'Douyu 包被截断: packet=$packetLength, remaining=$remaining',
+        );
+        break;
+      }
+
+      final bodyLength = fullMessageLength - 9;
+      final bodyStart = offset + 12;
+      final packetEnd = offset + packetLength;
+      if (data[packetEnd - 1] != 0) {
+        CoreLog.w('Douyu 包缺少结尾的 NUL 字节');
+        break;
+      }
+
+      try {
+        packets.add(
+          utf8.decode(
+            Uint8List.sublistView(data, bodyStart, bodyStart + bodyLength),
+          ),
+        );
+      } on FormatException catch (e) {
+        CoreLog.w('Douyu 包正文不是有效 UTF-8: $e');
+      }
+      offset = packetEnd;
     }
+
+    return packets;
   }
 
   //辣鸡STT

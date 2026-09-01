@@ -5,7 +5,10 @@ import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/interface/sync_resource.dart';
 import 'package:simple_live_app/services/db_service.dart';
 
-class HistorySyncResource implements SyncResource<List<History>> {
+class HistorySyncResource
+    implements
+        SyncResource<List<History>>,
+        InitialBidirectionalSyncResource<List<History>> {
   @override
   String get fileName => "SimpleLive_histories.json";
 
@@ -40,6 +43,13 @@ class HistorySyncResource implements SyncResource<List<History>> {
   }
 
   @override
+  List<History> prepareInitialBidirectional(List<History> local) {
+    return local
+        .map((item) => item.copyWith(syncDuration: 0))
+        .toList(growable: false);
+  }
+
+  @override
   List<History> merge(List<History> local, List<History> remote) {
     final map = {for (final item in local) item.id: item};
 
@@ -56,12 +66,13 @@ class HistorySyncResource implements SyncResource<List<History>> {
           remoteItem.watchDuration?.toDuration().inSeconds ?? 0;
       final localSyncSeconds = localItem.syncDuration;
 
-      // 如果远端时长和本地基础时长一致，取更新时间新的
-      if (remoteItem.watchDuration == localItem.watchDuration &&
-          localSyncSeconds == 0) {
-        map[remoteItem.id] = remoteItem.updateTime.isAfter(localItem.updateTime)
+      // 两端总时长一致时，说明远端已经包含这份累计结果。即使本地因上次
+      // 上传后落盘失败仍残留 syncDuration，也不能再次叠加。
+      if (remoteItem.watchDuration == localItem.watchDuration) {
+        final latest = remoteItem.updateTime.isAfter(localItem.updateTime)
             ? remoteItem
             : localItem;
+        map[remoteItem.id] = latest.copyWith(syncDuration: 0);
         continue;
       }
 

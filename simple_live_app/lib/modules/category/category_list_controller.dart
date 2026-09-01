@@ -31,27 +31,39 @@ class AppLiveCategory extends LiveCategory {
     required super.name,
     required super.children,
   }) {
-    showAll.value = children.length <= previewCount;
+    visibleCount.value =
+        children.length < previewCount ? children.length : previewCount;
   }
 
   static const int previewCount = 15;
+  static const int expansionBatchSize = 15;
 
-  final RxBool showAll = false.obs;
+  final RxInt visibleCount = 0.obs;
 
   bool get canExpand => children.length > previewCount;
 
-  int get remainingCount => canExpand ? children.length - previewCount : 0;
+  bool get isExpanded => !canExpand || visibleCount.value > previewCount;
 
-  List<LiveSubCategory> get visibleChildren {
-    if (showAll.value || !canExpand) {
-      return children;
-    }
-    return children.take(previewCount).toList(growable: false);
+  bool get hasMore => visibleCount.value < children.length;
+
+  int get remainingCount {
+    final count = children.length - visibleCount.value;
+    return count > 0 ? count : 0;
   }
+
+  List<LiveSubCategory> get visibleChildren =>
+      children.take(visibleCount.value).toList(growable: false);
 
   void toggleExpanded() {
     if (!canExpand) return;
-    showAll.toggle();
+    if (!hasMore) {
+      visibleCount.value = previewCount;
+      return;
+    }
+
+    final nextCount = visibleCount.value + expansionBatchSize;
+    visibleCount.value =
+        nextCount < children.length ? nextCount : children.length;
   }
 
   factory AppLiveCategory.fromLiveCategory(LiveCategory item) {

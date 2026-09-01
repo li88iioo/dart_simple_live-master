@@ -15,6 +15,9 @@ import 'package:url_launcher/url_launcher_string.dart';
 class MinePage extends StatelessWidget {
   const MinePage({super.key});
 
+  @visibleForTesting
+  static const bool profileCardBackdropBlurEnabled = false;
+
   static const _historyColor = Color(0xFF5B9BEA);
   static const _syncColor = Color(0xFF50B4AC);
   static const _linkColor = Color(0xFFE39B56);
@@ -208,7 +211,7 @@ class MinePage extends StatelessWidget {
       child: SliveGlassSurface(
         variant: SliveGlassVariant.panel,
         radius: SliveRadii.panel,
-        enableBackdropBlur: true,
+        enableBackdropBlur: profileCardBackdropBlurEnabled,
         onTap: () => Get.toNamed(RoutePath.kSettingsAccount),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 88),

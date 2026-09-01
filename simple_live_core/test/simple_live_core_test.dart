@@ -1,3 +1,4 @@
+import 'dart:io';
 
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:test/test.dart';
@@ -152,9 +153,17 @@ void testSite(LiveSite site) async {
 void main() {
   CoreLog.requestLogType = RequestLogType.short;
 
-  group('bili tests', () {
-    testSite(BiliBiliSite());
-  });
+  final runLiveIntegrationTests =
+      Platform.environment['RUN_LIVE_INTEGRATION_TESTS'] == 'true';
+  group(
+    'bili live integration tests',
+    () {
+      testSite(BiliBiliSite());
+    },
+    skip: runLiveIntegrationTests
+        ? false
+        : '设置 RUN_LIVE_INTEGRATION_TESTS=true 后运行公网集成测试',
+  );
 }
 
 //

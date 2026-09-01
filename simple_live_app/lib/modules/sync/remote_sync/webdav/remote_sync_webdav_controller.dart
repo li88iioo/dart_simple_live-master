@@ -4,6 +4,7 @@ import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/common/sync_mode.dart';
+import 'package:simple_live_app/modules/sync/remote_sync/webdav/common/webdav_endpoint_policy.dart';
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/executor/sync_executor.dart';
 import 'package:simple_live_app/requests/webdav_client.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
@@ -66,6 +67,13 @@ class RemoteSyncWebDAVController extends BaseController {
     if (uri.isEmpty) {
       notLogin.value = true;
     } else {
+      try {
+        uri = WebDavEndpointPolicy.parse(uri).toString();
+      } on FormatException catch (error) {
+        Log.w('已保存的 WebDAV 地址不再满足安全策略：${error.message}');
+        notLogin.value = true;
+        return;
+      }
       user.value = LocalStorageService.instance
           .getValue(LocalStorageService.kWebDAVUser, "");
       password = LocalStorageService.instance
@@ -114,20 +122,38 @@ class RemoteSyncWebDAVController extends BaseController {
   }
 
   // WebDAV登录
-  void doWebDAVLogin(
-      String webDAVUri, String webDAVUser, String webDAVPassword) async {
+  Future<void> doWebDAVLogin(
+    String webDAVUri,
+    String webDAVUser,
+    String webDAVPassword,
+  ) async {
+    late final String normalizedUri;
+    try {
+      normalizedUri = WebDavEndpointPolicy.parse(webDAVUri).toString();
+    } on FormatException catch (error) {
+      SmartDialog.showToast(error.message);
+      return;
+    }
     // 确认登录
-    davClient = DAVClient(webDAVUri, webDAVUser, webDAVPassword);
+    davClient = DAVClient(normalizedUri, webDAVUser, webDAVPassword);
     await checkIsLogin();
     if (!notLogin.value) {
       // 保存到本地
-      LocalStorageService.instance
-          .setValue(LocalStorageService.kWebDAVUri, webDAVUri);
-      LocalStorageService.instance
-          .setValue(LocalStorageService.kWebDAVUser, webDAVUser);
+      await LocalStorageService.instance.setValue(
+        LocalStorageService.kWebDAVUri,
+        normalizedUri,
+      );
+      await LocalStorageService.instance.setValue(
+        LocalStorageService.kWebDAVUser,
+        webDAVUser,
+      );
+      uri = normalizedUri;
       user.value = webDAVUser;
-      LocalStorageService.instance
-          .setValue(LocalStorageService.kWebDAVPassword, webDAVPassword);
+      password = webDAVPassword;
+      await LocalStorageService.instance.setValue(
+        LocalStorageService.kWebDAVPassword,
+        webDAVPassword,
+      );
       Get.back();
       SmartDialog.showToast("登录成功！");
     } else {
@@ -141,11 +167,17 @@ class RemoteSyncWebDAVController extends BaseController {
     var result = await Utils.showAlertDialog("确定要登出WebDAV账号？", title: "退出登录");
     if (result) {
       // 清除本地账号数据
-      LocalStorageService.instance.setValue(LocalStorageService.kWebDAVUri, "");
-      LocalStorageService.instance
-          .setValue(LocalStorageService.kWebDAVUser, "");
-      LocalStorageService.instance
-          .setValue(LocalStorageService.kWebDAVPassword, "");
+      await Future.wait<void>([
+        LocalStorageService.instance
+            .setValue(LocalStorageService.kWebDAVUri, ""),
+        LocalStorageService.instance
+            .setValue(LocalStorageService.kWebDAVUser, ""),
+        LocalStorageService.instance
+            .setValue(LocalStorageService.kWebDAVPassword, ""),
+      ]);
+      uri = '';
+      user.value = '--';
+      password = '';
       notLogin.value = true;
     }
   }
@@ -210,9 +242,16 @@ class RemoteSyncWebDAVController extends BaseController {
   }
 
   Future<void> _sync({required SyncMode mode}) async {
-    SyncExecutor.instance.buildExecutorAttr(davClient);
+    SyncExecutor.instance.buildExecutorAttr(
+      davClient,
+      isSyncFollows: isSyncFollows.value,
+      isSyncHistories: isSyncHistories.value,
+      isSyncBlockWord: isSyncBlockWord.value,
+      isSyncAccount: isSyncAccount.value,
+      isSyncSetting: isSyncSetting.value,
+    );
     await SyncExecutor.instance.sync(mode);
-    MigrationService.migrateDataByVersion();
+    await MigrationService.migrateDataByVersion();
   }
 
   // ui控制--密码可见控制

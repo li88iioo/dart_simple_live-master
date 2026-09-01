@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
@@ -11,6 +12,38 @@ void main() {
     FollowUserTag(id: 'live', tag: '直播中', userId: const []),
     FollowUserTag(id: 'offline', tag: '未开播', userId: const []),
   ];
+
+  test('关注列表使用原生滚动物理且卡片 Key 按用户身份稳定', () {
+    expect(followUserUsesNativeScrollPhysics, isTrue);
+    expect(
+      followUserStableCardKey('huya-room-1'),
+      followUserStableCardKey('huya-room-1'),
+    );
+    expect(
+      followUserStableCardKey('huya-room-1'),
+      isNot(followUserStableCardKey('huya-room-2')),
+    );
+  });
+
+  testWidgets('关注筛选项暴露可执行的语义点击动作', (tester) async {
+    final selectedId = ValueNotifier<String>('all');
+    addTearDown(selectedId.dispose);
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      _FilterBarTestApp(options: options, selectedId: selectedId),
+    );
+
+    final node = tester.getSemantics(find.bySemanticsLabel('直播中'));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    node.owner!.performAction(
+      node.id,
+      SemanticsAction.tap,
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(selectedId.value, 'live');
+    semantics.dispose();
+  });
 
   testWidgets('关注筛选栏保持整行外层与紧凑左对齐选项', (tester) async {
     final selectedId = ValueNotifier<String>('all');

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,7 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:fractional_indexing_dart/fractional_indexing_dart.dart';
 import 'package:get/get.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pinyin/pinyin.dart';
 import 'package:pool/pool.dart';
 import 'package:simple_live_app/app/constant.dart';
@@ -28,6 +28,36 @@ import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:synchronized/synchronized.dart';
+
+Future<bool> saveFollowJsonExport({
+  required FilePicker filePicker,
+  required String jsonText,
+  required DateTime now,
+}) async {
+  final fileName = 'SimpleLive_${now.millisecondsSinceEpoch ~/ 1000}.json';
+  final bytes = Uint8List.fromList(utf8.encode(jsonText));
+  final savedPath = await filePicker.saveFile(
+    dialogTitle: '导出关注列表',
+    fileName: fileName,
+    type: FileType.custom,
+    allowedExtensions: const ['json'],
+    bytes: bytes,
+  );
+  return savedPath != null;
+}
+
+Future<String> readFollowJsonImport(PlatformFile file) async {
+  final bytes = file.bytes;
+  if (bytes != null) {
+    return utf8.decode(bytes);
+  }
+
+  final path = file.path;
+  if (path == null || path.isEmpty) {
+    throw const FileSystemException('无法读取所选文件');
+  }
+  return File(path).readAsString();
+}
 
 class FollowService extends GetxService with WidgetsBindingObserver {
   StreamSubscription<dynamic>? subscription;
@@ -589,33 +619,21 @@ class FollowService extends GetxService with WidgetsBindingObserver {
     }
   }
 
-  void exportFile() async {
+  Future<void> exportFile() async {
     if (followList.isEmpty) {
       SmartDialog.showToast("列表为空");
       return;
     }
 
     try {
-      var status = await Utils.checkStorgePermission();
-      if (!status) {
-        SmartDialog.showToast("无权限");
+      final saved = await saveFollowJsonExport(
+        filePicker: FilePicker.platform,
+        jsonText: generateJson(),
+        now: DateTime.now(),
+      );
+      if (!saved) {
         return;
       }
-
-      var dir = "";
-      if (Platform.isIOS) {
-        dir = (await getApplicationDocumentsDirectory()).path;
-      } else {
-        dir = await FilePicker.platform.getDirectoryPath() ?? "";
-      }
-
-      if (dir.isEmpty) {
-        return;
-      }
-      var jsonFile = File(
-          '$dir/SimpleLive_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json');
-      var jsonText = generateJson();
-      await jsonFile.writeAsString(jsonText);
       SmartDialog.showToast("已导出关注列表");
     } catch (e) {
       Log.logPrint(e);
@@ -623,22 +641,17 @@ class FollowService extends GetxService with WidgetsBindingObserver {
     }
   }
 
-  void inputFile() async {
+  Future<void> inputFile() async {
     try {
-      var status = await Utils.checkStorgePermission();
-      if (!status) {
-        SmartDialog.showToast("无权限");
-        return;
-      }
-      var file = await FilePicker.platform.pickFiles(
+      final file = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
+        withData: Platform.isAndroid || Platform.isIOS,
       );
       if (file == null) {
         return;
       }
-      var jsonFile = File(file.files.single.path!);
-      await inputJson(await jsonFile.readAsString());
+      await inputJson(await readFollowJsonImport(file.files.single));
       SmartDialog.showToast("导入成功");
     } catch (e) {
       Log.logPrint(e);

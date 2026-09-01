@@ -99,7 +99,7 @@ class _RemoteSyncWebDAVConfigPageState
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            '服务器地址需以 http:// 或 https:// 开头。',
+                            '公网服务请使用 HTTPS；HTTP 仅允许局域网地址。',
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: colors.textSecondary,
@@ -201,7 +201,7 @@ class _RemoteSyncWebDAVConfigPageState
       content: [
         const Text('此功能可以将您的数据备份到 WebDAV 服务器中或者进行数据恢复。\n'),
         const Text(
-          'WebDAV 服务器地址请以 http:// 或 https:// 开头，如坚果云（点击复制）：',
+          '公网 WebDAV 必须使用 https://；仅局域网 NAS 可使用 http://。例如坚果云（点击复制）：',
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),

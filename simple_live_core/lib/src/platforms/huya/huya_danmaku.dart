@@ -114,6 +114,7 @@ class HuyaDanmaku implements LiveDanmaku {
     webScoketUtils = WebScoketUtils(
       url: serverUrl,
       heartBeatTime: heartbeatTime,
+      readTimeout: const Duration(minutes: 3),
       onMessage: (e) {
         if (e is List<int>) {
           decodeMessage(e);

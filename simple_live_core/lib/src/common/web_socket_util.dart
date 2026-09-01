@@ -11,37 +11,43 @@ enum SocketStatus {
 class WebScoketUtils {
   SocketStatus status = SocketStatus.closed;
 
-  /// 链接
+  /// 主连接地址。
   final String url;
 
-  /// 备用链接
+  /// 备用连接地址。
   final String? backupUrl;
 
-  /// 心跳时间
+  /// 应用层心跳间隔，单位为毫秒。
   final int heartBeatTime;
 
-  /// 接收到信息
+  /// 接收到信息。
   final Function(dynamic)? onMessage;
 
-  /// 连接关闭
+  /// 连接关闭或连接失败。
   final Function(String msg)? onClose;
 
-  /// 尝试重连
+  /// 开始自动重连。
   final Function()? onReconnect;
 
-  /// 准备就绪
+  /// WebSocket 握手完成。
   final Function()? onReady;
 
-  /// 心跳
+  /// 发送应用层心跳。
   final Function()? onHeartBeat;
 
-  /// 单次连接超时
+  /// 单次连接超时。
   final Duration connectTimeout;
 
-  /// 两次重连之间的等待时间
+  /// 常规重连间隔。
   final Duration reconnectInterval;
 
-  /// 请求头
+  /// 常规重连次数耗尽后的低频重试间隔。
+  final Duration exhaustedReconnectInterval;
+
+  /// 最长无入站消息时间。为 null 时关闭读 watchdog。
+  final Duration? readTimeout;
+
+  /// 请求头。
   Map<String, dynamic>? headers;
 
   WebScoketUtils({
@@ -56,25 +62,33 @@ class WebScoketUtils {
     this.backupUrl,
     this.connectTimeout = const Duration(seconds: 10),
     this.reconnectInterval = const Duration(seconds: 5),
+    this.exhaustedReconnectInterval = const Duration(seconds: 45),
+    this.readTimeout = const Duration(minutes: 5),
     this.maxReconnectTime = 5,
   });
 
   IOWebSocketChannel? webSocket;
   Timer? heartBeatTimer;
 
-  /// 已执行的连续重连次数；收到任意服务端消息后清零。
+  /// 已执行的连续常规重连次数；收到任意服务端消息后清零。
   int reconnectTime = 0;
   Timer? reconnectTimer;
 
-  /// 最大连续重连次数
+  /// 最大连续常规重连次数。
   int maxReconnectTime;
 
   StreamSubscription<dynamic>? streamSubscription;
 
+  /// 当前连接最后一次收到服务端消息的时间。
+  DateTime? get lastInboundAt => _lastInboundAt;
+
   bool _closedByUser = true;
   bool _reconnectNotified = false;
+  bool _reconnectExhaustedNotified = false;
   int _connectionGeneration = 0;
   int? _handledDisconnectGeneration;
+  DateTime? _lastInboundAt;
+  Timer? _readWatchdogTimer;
 
   /// 建立连接。每一轮会依次尝试主地址与不同的备用地址。
   Future<void> connect({bool retry = false}) async {
@@ -84,6 +98,7 @@ class WebScoketUtils {
     if (!retry) {
       reconnectTime = 0;
       _reconnectNotified = false;
+      _reconnectExhaustedNotified = false;
     }
     await _connectAttempt(preferBackup: retry);
   }
@@ -159,6 +174,7 @@ class WebScoketUtils {
     webSocket = channel;
     status = SocketStatus.connected;
     _handledDisconnectGeneration = null;
+    _lastInboundAt = null;
 
     streamSubscription = channel.stream.listen(
       (data) {
@@ -172,6 +188,7 @@ class WebScoketUtils {
     );
 
     initHeartBeat();
+    _armReadWatchdog(generation);
     try {
       onReady?.call();
     } catch (error) {
@@ -183,6 +200,7 @@ class WebScoketUtils {
   void ready() {
     final channel = webSocket;
     if (channel == null || _closedByUser) return;
+    if (status == SocketStatus.connected && streamSubscription != null) return;
     _activateConnection(channel, _connectionGeneration);
   }
 
@@ -190,17 +208,65 @@ class WebScoketUtils {
     heartBeatTimer?.cancel();
     heartBeatTimer = Timer.periodic(
       Duration(milliseconds: heartBeatTime),
-      (timer) {
-        onHeartBeat?.call();
+      (_) {
+        if (_closedByUser || status != SocketStatus.connected) return;
+        try {
+          onHeartBeat?.call();
+        } catch (error) {
+          _handleDisconnect(_connectionGeneration, error: error);
+        }
       },
     );
   }
 
   void receiveMessage(dynamic data) {
+    _lastInboundAt = DateTime.now();
+    _armReadWatchdog(_connectionGeneration);
+
     // 接收到一条服务端信息才算本轮重连成功。
     reconnectTime = 0;
     _reconnectNotified = false;
+    _reconnectExhaustedNotified = false;
     onMessage?.call(data);
+  }
+
+  void _armReadWatchdog(int generation) {
+    _readWatchdogTimer?.cancel();
+    _readWatchdogTimer = null;
+
+    final timeout = readTimeout;
+    if (timeout == null || timeout <= Duration.zero) return;
+
+    _readWatchdogTimer = Timer(timeout, () {
+      _readWatchdogTimer = null;
+      if (_closedByUser || generation != _connectionGeneration) return;
+      if (status != SocketStatus.connected) return;
+
+      final lastInboundAt = _lastInboundAt;
+      if (lastInboundAt != null) {
+        final remaining = timeout - DateTime.now().difference(lastInboundAt);
+        if (remaining > Duration.zero) {
+          _readWatchdogTimer = Timer(
+            remaining,
+            () => _handleReadTimeout(generation, timeout),
+          );
+          return;
+        }
+      }
+      _handleReadTimeout(generation, timeout);
+    });
+  }
+
+  void _handleReadTimeout(int generation, Duration timeout) {
+    _readWatchdogTimer = null;
+    if (_closedByUser || generation != _connectionGeneration) return;
+    if (status != SocketStatus.connected) return;
+    _handleDisconnect(
+      generation,
+      error: TimeoutException(
+        'WebSocket 在 ${timeout.inMilliseconds}ms 内未收到服务端消息',
+      ),
+    );
   }
 
   void onError(Object error, StackTrace _) {
@@ -244,6 +310,7 @@ class WebScoketUtils {
     status = SocketStatus.closed;
     reconnectTime = 0;
     _reconnectNotified = false;
+    _reconnectExhaustedNotified = false;
     _handledDisconnectGeneration = null;
     _connectionGeneration++;
 
@@ -252,7 +319,7 @@ class WebScoketUtils {
     _closeActiveConnection();
   }
 
-  /// 主动放弃当前连接并进入有限次数的重连流程。
+  /// 主动放弃当前连接并进入自动重连流程。
   void reconnect() {
     if (_closedByUser) return;
     _scheduleReconnect();
@@ -264,31 +331,42 @@ class WebScoketUtils {
     _connectionGeneration++;
     _handledDisconnectGeneration = null;
     _closeActiveConnection();
-    status = SocketStatus.closed;
 
-    if (reconnectTime >= maxReconnectTime) {
-      close();
-      onClose?.call("重连超过最大次数，与服务器断开连接");
-      return;
-    }
-
-    reconnectTime++;
     if (!_reconnectNotified) {
       _reconnectNotified = true;
       onReconnect?.call();
       if (_closedByUser) return;
     }
 
-    reconnectTimer = Timer(reconnectInterval, () {
+    final bool exhausted = reconnectTime >= maxReconnectTime;
+    final Duration delay;
+    if (exhausted) {
+      status = SocketStatus.failed;
+      delay = exhaustedReconnectInterval;
+      if (!_reconnectExhaustedNotified) {
+        _reconnectExhaustedNotified = true;
+        onClose?.call('重连超过最大次数，将低频继续尝试');
+        if (_closedByUser) return;
+      }
+    } else {
+      status = SocketStatus.closed;
+      reconnectTime++;
+      delay = reconnectInterval;
+    }
+
+    final preferBackup = reconnectTime.isOdd;
+    reconnectTimer = Timer(delay, () {
       reconnectTimer = null;
       if (_closedByUser) return;
-      _connectAttempt();
+      _connectAttempt(preferBackup: preferBackup);
     });
   }
 
   void _closeActiveConnection() {
     heartBeatTimer?.cancel();
     heartBeatTimer = null;
+    _readWatchdogTimer?.cancel();
+    _readWatchdogTimer = null;
 
     final subscription = streamSubscription;
     streamSubscription = null;

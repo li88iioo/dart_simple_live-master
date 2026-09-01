@@ -31,14 +31,15 @@ class PlatformService extends GetxService {
     douyinCookie = LocalStorageService.instance
         .getValue(LocalStorageService.kDouyinCookie, "");
     douyinLogined.value = douyinCookie.isNotEmpty;
-    loadDouyinUserInfo();
+    // 先应用本地 Cookie，账号昵称的网络刷新延迟到首帧之后执行。
+    _setDouyinSiteCookie();
   }
 
   void _setDouyinHlsFirst() {
     _douyinSite.hlsFirst = douyinHlsFirst;
   }
 
-  Future loadDouyinUserInfo() async {
+  Future<void> loadDouyinUserInfo() async {
     if (douyinCookie.isEmpty) return;
     try {
       final data = await _douyinSite.getUserInfoByCookie(douyinCookie);

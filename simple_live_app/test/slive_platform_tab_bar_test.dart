@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/constant.dart';
@@ -12,6 +13,37 @@ void main() {
     Sites.allSites[Constant.kDouyu]!,
     Sites.allSites[Constant.kHuya]!,
   ];
+
+  testWidgets('平台选项暴露可执行的语义点击动作', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final key = GlobalKey<_PlatformTabHarnessState>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppStyle.light(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6F8FD8),
+          ),
+          glassMode: SliveGlassMode.soft,
+        ),
+        home: Scaffold(
+          body: SafeArea(
+            child: _PlatformTabHarness(key: key, sites: sites),
+          ),
+        ),
+      ),
+    );
+
+    final node = tester.getSemantics(find.bySemanticsLabel('虎牙直播'));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    node.owner!.performAction(
+      node.id,
+      SemanticsAction.tap,
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(key.currentState?.selectedIndex, 2);
+    semantics.dispose();
+  });
 
   testWidgets('平台胶囊栏展示三个平台并同步选择状态', (tester) async {
     final key = GlobalKey<_PlatformTabHarnessState>();

@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:html_unescape/html_unescape.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_core/src/common/http_client.dart';
+import 'package:simple_live_core/src/common/play_url_resolver.dart';
 import 'package:simple_live_core/src/platforms/douyu/douyu_utils.dart';
 
 class DouyuSite implements LiveSite {
@@ -81,18 +82,17 @@ class DouyuSite implements LiveSite {
     var data = await DouyuUtils.sign(detail.roomId);
     List<LivePlayQuality> qualities = [];
     var result = await HttpClient.instance.postJson(
-      "https://www.douyu.com/lapi/live/getH5PlayV1/${detail.roomId}",
-      data: data,
-      formUrlEncoded: true,
+        "https://www.douyu.com/lapi/live/getH5PlayV1/${detail.roomId}",
+        data: data,
+        formUrlEncoded: true,
         header: {
           'accept':
-          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'accept-encoding': "gzip, deflate",
           'accept-language': 'zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0.3',
           'user-agent':
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.43"
-        }
-    );
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.43"
+        });
 
     var cdns = <String>[];
     for (var item in result["data"]["cdnsWithName"]) {
@@ -122,15 +122,16 @@ class DouyuSite implements LiveSite {
   Future<LivePlayUrl> getPlayUrls(
       {required LiveRoomDetail detail,
       required LivePlayQuality quality}) async {
-    var data = quality.data as DouyuPlayData;
-
-    List<String> urls = [];
-    for (var item in data.cdns) {
-      var url = await getPlayUrl(detail.roomId, data.rate, item);
-      if (url.isNotEmpty) {
-        urls.add(url);
-      }
-    }
+    final data = quality.data as DouyuPlayData;
+    final urls = await resolvePlayUrls(
+      data.cdns.map(
+        (cdn) => () => getPlayUrl(detail.roomId, data.rate, cdn),
+      ),
+      maxConcurrent: 3,
+      onError: (index, error, _) {
+        CoreLog.w('斗鱼播放线路 ${data.cdns[index]} 解析失败: $error');
+      },
+    );
     return LivePlayUrl(urls: urls);
   }
 
@@ -149,7 +150,29 @@ class DouyuSite implements LiveSite {
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.43"
         });
 
-    return "${result["data"]["rtmp_url"]}/${HtmlUnescape().convert(result["data"]["rtmp_live"].toString())}";
+    if (result is! Map || result["error"] != 0) return '';
+    final data = result["data"];
+    if (data is! Map) return '';
+
+    final baseUri = parseHttpPlayUri(
+      data["rtmp_url"]?.toString(),
+      requirePath: false,
+    );
+    final livePath = HtmlUnescape().convert(
+      data["rtmp_live"]?.toString() ?? '',
+    );
+    if (baseUri == null || livePath.isEmpty || livePath == 'null') return '';
+    final relativeLivePath =
+        livePath.startsWith('/') ? livePath.substring(1) : livePath;
+    if (relativeLivePath.isEmpty) return '';
+
+    final directory = baseUri.path.endsWith('/')
+        ? baseUri
+        : baseUri.replace(path: '${baseUri.path}/');
+    return normalizeHttpPlayUrl(
+          directory.resolve(relativeLivePath).toString(),
+        ) ??
+        '';
   }
 
   @override

@@ -1,0 +1,69 @@
+name: Flutter and Dart quality gate
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: Git ref or SHA to validate.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version-file: simple_live_app/pubspec.yaml
+          channel: stable
+          cache: true
+
+      - name: Disable Flutter analytics
+        run: flutter config --no-analytics
+
+      - name: Restore app packages
+        working-directory: simple_live_app
+        run: flutter pub get
+
+      - name: Analyze app
+        working-directory: simple_live_app
+        run: flutter analyze --no-pub
+
+      - name: Test app
+        working-directory: simple_live_app
+        run: flutter test --no-pub --concurrency=1
+
+      - name: Restore core packages
+        working-directory: simple_live_core
+        run: flutter pub get
+
+      - name: Analyze core
+        working-directory: simple_live_core
+        run: dart analyze
+
+      - name: Test core
+        working-directory: simple_live_core
+        run: dart test --concurrency=1
+
+      - name: Restore console packages
+        working-directory: simple_live_console
+        run: flutter pub get
+
+      - name: Analyze console
+        working-directory: simple_live_console
+        run: dart analyze
+
+      - name: Test console
+        working-directory: simple_live_console
+        run: dart test

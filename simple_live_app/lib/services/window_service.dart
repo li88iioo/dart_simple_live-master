@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:get/get.dart';
+import 'package:simple_live_app/services/app_shutdown_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -36,6 +37,7 @@ class WindowService extends GetxService implements WindowListener {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions);
+    await windowManager.setPreventClose(true);
     await resize();
     await _syncWindowState();
     await windowManager.show();
@@ -85,9 +87,7 @@ class WindowService extends GetxService implements WindowListener {
 
   @override
   void onWindowClose() {
-    if (Platform.isLinux) {
-      exit(0);
-    }
+    AppShutdownService.instance.requestExit();
   }
 
   @override

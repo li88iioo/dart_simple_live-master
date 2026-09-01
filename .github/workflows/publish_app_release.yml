@@ -1,118 +1,121 @@
 name: app-build-action-release
-# 推送 Tag 时触发
+
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
   push:
     tags:
       - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FASTFORGE_REPOSITORY: https://github.com/SlotSun/fastforge.git
+  FASTFORGE_COMMIT: 84585c361a727a0eba48dd04f8e6e7c9d940ccad
+  MELOS_VERSION: 6.3.3
+  INNO_SETUP_VERSION: 6.3.2
+
 jobs:
-  # 打包 Android
+  quality:
+    uses: ./.github/workflows/quality_gate.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+
   build-android:
-    runs-on: ubuntu-latest
-    permissions: write-all
-
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      # 签出代码
-      - uses: actions/checkout@v6
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      # APK 签名设置
-      - name: Download Android keystore
-        id: android_keystore
-        if: env.HAS_KEYSTORE == 'true'
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          fileName: keystore.jks
-          encodedString: ${{ secrets.KEYSTORE_BASE64 }}
+      - name: Validate Android release signing secrets
         env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-      - name: Create key.properties
-        if: env.HAS_KEYSTORE == 'true'
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          missing=()
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_PASSWORD KEY_ALIAS; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("${name}")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf 'Missing required Android release signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Configure Android signing and optional Firebase files
         env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FIREBASE_JSON: ${{ secrets.FIREBASE_JSON }}
           FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
         run: |
-          if [ -n "$FIREBASE_JSON" ]; then
-            echo "$FIREBASE_JSON" | base64 --decode > simple_live_app/android/app/google-services.json
+          keystore_path="${RUNNER_TEMP}/slive-release-keystore.jks"
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${keystore_path}"
+          test -s "${keystore_path}"
+          cat > simple_live_app/android/key.properties <<PROPERTIES
+          storeFile=${keystore_path}
+          storePassword=${STORE_PASSWORD}
+          keyPassword=${KEY_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          PROPERTIES
+          if [ -n "${FIREBASE_JSON}" ]; then
+            printf '%s' "${FIREBASE_JSON}" | base64 --decode > simple_live_app/android/app/google-services.json
           fi
-          if [ -n "$FIREBASE_OPTIONS_DART" ]; then
-            echo "$FIREBASE_OPTIONS_DART" | base64 --decode > simple_live_app/lib/firebase_options.dart
+          if [ -n "${FIREBASE_OPTIONS_DART}" ]; then
+            printf '%s' "${FIREBASE_OPTIONS_DART}" | base64 --decode > simple_live_app/lib/firebase_options.dart
           fi
-          echo "storeFile=${{ steps.android_keystore.outputs.filePath }}" > simple_live_app/android/key.properties
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> simple_live_app/android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> simple_live_app/android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> simple_live_app/android/key.properties
 
-      # 设置 JAVA 环境
-      - uses: actions/setup-java@v5
+      - name: Setup Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
-          distribution: "zulu"
+          distribution: zulu
           java-version: "17"
-          cache: "gradle"
+          cache: gradle
           cache-dependency-path: |
             simple_live_app/android/*.gradle*
             simple_live_app/android/**/gradle-wrapper.properties
 
-      # 设置 Flutter
-      - name: Flutter action
-        uses: subosito/flutter-action@v2
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
-          channel: stable
           flutter-version-file: simple_live_app/pubspec.yaml
+          channel: stable
           cache: true
 
-      # 更新 Flutter 的 packages
       - name: Restore packages
-        run: |
-          cd simple_live_app
-          flutter pub get
+        working-directory: simple_live_app
+        run: flutter pub get
 
-      # 打包 APK
-      - name: Build APK
-        run: |
-          cd simple_live_app
-          flutter build apk --release --split-per-abi
+      - name: Build signed APKs
+        working-directory: simple_live_app
+        run: flutter build apk --release --split-per-abi
 
-      # 上传 APK 至 Artifacts
-      - name: Upload APK to Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android
+          if-no-files-found: error
+          retention-days: 7
           path: |
             simple_live_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
             simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
 
-      # 读取版本信息
-      - name: Read version
-        id: version
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: assets/app_version.json
-      - name: Echo version
-        run: echo "${{ fromJson(steps.version.outputs.content).version }}"
-      - name: Echo version content
-        run: echo "${{ fromJson(steps.version.outputs.content).version_desc }}"
-
-      # 上传至 Release
-      - name: Upload Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ fromJson(steps.version.outputs.content).version }}
-          name: "${{ fromJson(steps.version.outputs.content).version }}"
-          body: "${{ fromJson(steps.version.outputs.content).version_desc }}"
-          prerelease: ${{ fromJson(steps.version.outputs.content).prerelease }}
-          token: ${{ secrets.TOKEN || github.token }}
-          files: |
-            simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-      # 完成
-      - run: echo "🍏 This job's status is ${{ job.status }}."
-
-  # 打包 Linux
   build-linux:
+    needs: quality
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-24.04
@@ -120,25 +123,23 @@ jobs:
           - runner: ubuntu-24.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: write
+    timeout-minutes: 90
     steps:
-      # 签出代码
-      - uses: actions/checkout@v4
-      # 设置 Flutter 环境
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version-file: simple_live_app/pubspec.yaml
-          channel: master
-      # 安装依赖
-      - name: Update apt-get
-        run: sudo apt-get update
-      - name: Install Dependencies
+          channel: stable
+          cache: true
+
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake libgtk-3-dev unzip libasound2-dev gcc g++ autoconf automake \
-              debhelper glslang-dev ladspa-sdk xutils-dev libasound2-dev libarchive-dev libbluray-dev \
+              debhelper glslang-dev ladspa-sdk xutils-dev libarchive-dev libbluray-dev \
               libdav1d-dev libdvdnav-dev libegl1-mesa-dev libepoxy-dev libfontconfig-dev libfreetype6-dev \
               libfribidi-dev libgl1-mesa-dev libgbm-dev libgme-dev libgsm1-dev libharfbuzz-dev libjpeg-dev \
               libbrotli-dev liblcms2-dev libmodplug-dev libmp3lame-dev libopenal-dev \
@@ -150,144 +151,173 @@ jobs:
               linux-libc-dev nasm ninja-build pkg-config python3 python3-docutils wayland-protocols \
               x11proto-core-dev zlib1g-dev libfdk-aac-dev libtheora-dev libwebp-dev \
               unixodbc-dev libpq-dev libxxhash-dev libaom-dev libbs2b-dev libcaca-dev libcdio-paranoia-dev
-      # 打开 Linux Desktop 支持
-      - name: Enable Flutter Desktop
-        run: flutter config --enable-linux-desktop
-      # 更新 Flutter 的 packages
-      - name: Restore Packages
+
+      - name: Enable Flutter desktop
+        run: flutter config --enable-linux-desktop --no-analytics
+
+      - name: Restore packages
+        working-directory: simple_live_app
+        run: flutter pub get
+
+      - name: Install pinned fastforge
         run: |
-          cd simple_live_app
-          flutter pub get
-      # 设置 Fastforge 环境
-      - name: Install fast-forge
-        run: |
-          git clone https://github.com/SlotSun/fastforge.git
+          git clone --filter=blob:none "${FASTFORGE_REPOSITORY}" fastforge
+          git -C fastforge checkout --detach "${FASTFORGE_COMMIT}"
+          dart pub global activate melos "${MELOS_VERSION}"
           cd fastforge
-          dart pub global activate melos
           melos run activate
-      # build Linux DEB\ZIP
-      - name: Build Linux
+
+      - name: Build Linux packages
+        working-directory: simple_live_app
         run: |
-          cd simple_live_app
           fastforge package --platform linux --targets deb,zip --skip-clean
-          cd build/dist/*
-          mv simple_live_app-*-linux.deb Slive-${{ matrix.arch }}-linux.deb
-          mv simple_live_app-*-linux.zip Slive-${{ matrix.arch }}-linux.zip
-      # 上传 Linux 包至 Artifacts
-      - name: Upload Linux APP to Artifacts
-        uses: actions/upload-artifact@v4
+          dist_dir="$(find build/dist -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          test -n "${dist_dir}"
+          mv "${dist_dir}"/simple_live_app-*-linux.deb "${dist_dir}/Slive-${{ matrix.arch }}-linux.deb"
+          mv "${dist_dir}"/simple_live_app-*-linux.zip "${dist_dir}/Slive-${{ matrix.arch }}-linux.zip"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 7
           path: |
             simple_live_app/build/dist/*/*.deb
             simple_live_app/build/dist/*/*.zip
 
-      # 读取版本信息
-      - name: Read version
-        id: version
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: assets/app_version.json
-      - name: Echo version
-        run: echo "${{ fromJson(steps.version.outputs.content).version }}"
-      - name: Echo version content
-        run: echo "${{ fromJson(steps.version.outputs.content).version_desc }}"
-
-      # 上传至Release
-      - name: Upload Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ fromJson(steps.version.outputs.content).version }}
-          name: "${{ fromJson(steps.version.outputs.content).version }}"
-          body: "${{ fromJson(steps.version.outputs.content).version_desc }}"
-          prerelease: ${{ fromJson(steps.version.outputs.content).prerelease }}
-          token: ${{ secrets.TOKEN || github.token }}
-          files: |
-            simple_live_app/build/dist/*/*.deb
-            simple_live_app/build/dist/*/*.zip
-      # 完成
-      - run: echo "🍏 Linux job's status is ${{ job.status }}."
-
-  # 打包Windows
   build-windows:
+    needs: quality
     runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version-file: simple_live_app/pubspec.yaml
+          channel: stable
+          cache: true
+
+      - name: Enable Flutter desktop
+        run: flutter config --enable-windows-desktop --no-analytics
+
+      - name: Restore packages
+        working-directory: simple_live_app
+        run: flutter pub get
+
+      - name: Install pinned packaging tools
+        shell: pwsh
+        run: |
+          git clone --filter=blob:none "$env:FASTFORGE_REPOSITORY" fastforge
+          git -C fastforge checkout --detach "$env:FASTFORGE_COMMIT"
+          dart pub global activate melos "$env:MELOS_VERSION"
+          Push-Location fastforge
+          melos run activate
+          Pop-Location
+          choco install innosetup --version="$env:INNO_SETUP_VERSION" -y --no-progress
+
+      - name: Add Chinese language file for Inno Setup
+        shell: pwsh
+        run: Copy-Item "simple_live_app/windows/packaging/exe/ChineseSimplified.isl" "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
+
+      - name: Build Windows packages
+        working-directory: simple_live_app
+        shell: pwsh
+        run: |
+          fastforge package --platform windows --targets msix,zip,exe --skip-clean
+          $distDirectory = Get-ChildItem "build/dist" -Directory | Select-Object -First 1
+          if ($null -eq $distDirectory) { throw "Fastforge did not create build/dist output." }
+          Get-ChildItem $distDirectory.FullName -Filter "simple_live_app-*" | ForEach-Object {
+            $newName = $_.Name -replace '^simple_live_app', 'Slive'
+            Rename-Item $_.FullName -NewName $newName
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            simple_live_app/build/dist/*/*.msix
+            simple_live_app/build/dist/*/*.zip
+            simple_live_app/build/dist/*/*.exe
+
+  release:
+    needs:
+      - quality
+      - build-android
+      - build-linux
+      - build-windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
-      # 签出代码
-      - uses: actions/checkout@v4
-      # 设置 Flutter 环境
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: simple_live_app/pubspec.yaml
-          cache: true
-          channel: "stable"
-      - name: Enable Flutter Desktop
-        run: flutter config --enable-windows-desktop
-      - name: Restore Packages
-        run: |
-          cd simple_live_app
-          flutter pub get
-      # 设置 Fastforge 环境 和 Inno Setup
-      - name: Install Fastforge and Inno Setup
-        run: |
-          git clone https://github.com/SlotSun/fastforge.git
-          cd fastforge
-          dart pub global activate melos
-          melos run activate
-          choco install innosetup
-      # 添加中文安装引导
-      - name: Add Chinese language file for Inno Setup
-        run: |
-          cd simple_live_app
-          Copy-Item "windows/packaging/exe/ChineseSimplified.isl" "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
-        shell: powershell
-      # build Windows ZIP\MSIX\EXE
-      - name: Build Windows
-        run: |
-          cd simple_live_app
-          fastforge package --platform windows --targets msix,zip,exe --skip-clean
-          cd build/dist/*
-          Get-ChildItem "simple_live_app-*" | ForEach-Object {
-              $newName = $_.Name -replace '^simple_live_app', 'Slive'
-              Rename-Item $_ -NewName $newName
-          }
-        shell: pwsh
-      # 上传 Windows 至 Artifacts
-      - name: Upload Windows APP to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: |
-            simple_live_app/build/dist/*/*.msix
-            simple_live_app/build/dist/*/*.zip
-            simple_live_app/build/dist/*/*.exe
+      - name: Checkout release metadata
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      # 读取版本信息
-      - name: Read version
+      - name: Read and validate release metadata
         id: version
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: assets/app_version.json
-      - name: Echo version
-        run: echo "${{ fromJson(steps.version.outputs.content).version }}"
-      - name: Echo version content
-        run: echo "${{ fromJson(steps.version.outputs.content).version_desc }}"
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          jq -e '
+            (.version | type == "string" and length > 0) and
+            (.version_desc | type == "string") and
+            (.prerelease | type == "boolean")
+          ' assets/app_version.json >/dev/null
+          version="$(jq -r '.version' assets/app_version.json)"
+          expected_tag="v${version}"
+          if [ "${REF_TYPE}" = "tag" ] && [ "${REF_NAME}" != "${expected_tag}" ]; then
+            echo "Tag ${REF_NAME} does not match assets/app_version.json (${expected_tag})." >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=$(jq -r '.prerelease' assets/app_version.json)" >> "${GITHUB_OUTPUT}"
+          jq -r '.version_desc' assets/app_version.json > release-notes.md
 
-      # 上传至 Release
-      - name: Upload Release
-        uses: softprops/action-gh-release@v1
+      - name: Download all build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          tag_name: v${{ fromJson(steps.version.outputs.content).version }}
-          name: "${{ fromJson(steps.version.outputs.content).version }}"
-          body: "${{ fromJson(steps.version.outputs.content).version_desc }}"
-          prerelease: ${{ fromJson(steps.version.outputs.content).prerelease }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release assets
+        run: |
+          find release-assets -maxdepth 1 -type f -print | sort
+          for artifact in \
+            app-armeabi-v7a-release.apk \
+            app-arm64-v8a-release.apk \
+            app-x86_64-release.apk \
+            Slive-x86_64-linux.deb \
+            Slive-x86_64-linux.zip \
+            Slive-aarch64-linux.deb \
+            Slive-aarch64-linux.zip; do
+            test -f "release-assets/${artifact}" || {
+              echo "Missing required release artifact: ${artifact}" >&2
+              exit 1
+            }
+          done
+          test "$(find release-assets -maxdepth 1 -type f -name '*.msix' | wc -l)" -ge 1
+          test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l)" -ge 1
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
           token: ${{ secrets.TOKEN || github.token }}
+          fail_on_unmatched_files: true
           files: |
-            simple_live_app/build/dist/*/*.msix
-            simple_live_app/build/dist/*/*.zip
-            simple_live_app/build/dist/*/*.exe
-
-      # 完成
-      - run: echo "🍏 Windows job's status is ${{ job.status }}."
+            release-assets/*.apk
+            release-assets/*.deb
+            release-assets/*.zip
+            release-assets/*.msix
+            release-assets/*.exe

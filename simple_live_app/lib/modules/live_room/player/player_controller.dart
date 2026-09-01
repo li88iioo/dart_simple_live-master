@@ -24,7 +24,7 @@ import 'package:simple_live_app/app/custom_throttle.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:simple_live_app/modules/live_room/player/player_system_lease.dart';
 import 'package:window_manager/window_manager.dart';
 
 mixin PlayerMixin {
@@ -262,12 +262,13 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   final VolumeController volumeController = VolumeController.instance;
   final pip = Floating();
   StreamSubscription<PiPStatus>? _pipSubscription;
-  bool _systemUiChanged = false;
-  bool _orientationChanged = false;
-  bool _brightnessChanged = false;
+  late final int _systemLeaseId;
+  Future<void> _fullScreenOperation = Future<void>.value();
+  int _fullScreenTransitionId = 0;
 
   /// 初始化一些系统状态
-  void initSystem() async {
+  void initSystem() {
+    _systemLeaseId = playerSystemLeaseCoordinator.acquire();
     if (Platform.isAndroid || Platform.isIOS) {
       volumeController.showSystemUI = false;
     }
@@ -279,77 +280,96 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   /// 释放一些系统状态
   Future resetSystem() async {
     _pipSubscription?.cancel();
+    final reset = playerSystemLeaseCoordinator.takeForReset(_systemLeaseId);
+    if (reset == null) return;
     // 普通竖屏观看不会改系统 UI、方向或亮度，退出时不要无条件触发
     // WindowInsets/配置更新，避免返回动画结束后又发生一次整窗布局。
-    if (_systemUiChanged) {
+    if (reset.systemUiChanged) {
       await SystemChrome.setEnabledSystemUIMode(
         SystemUiMode.edgeToEdge,
         overlays: SystemUiOverlay.values,
       );
-      _systemUiChanged = false;
     }
-    if (_orientationChanged) {
+    if (reset.orientationChanged) {
       await setPortraitOrientation();
-      _orientationChanged = false;
     }
-    if (_brightnessChanged &&
+    if (reset.brightnessChanged &&
         (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
       try {
         await screenBrightness.resetApplicationScreenBrightness();
       } catch (e) {
         Log.logPrint(e);
       }
-      _brightnessChanged = false;
     }
+  }
 
-    await WakelockPlus.disable();
+  Future<void> _queueFullScreenOperation(
+    Future<void> Function() operation,
+  ) {
+    final queued = _fullScreenOperation.then((_) => operation());
+    _fullScreenOperation = queued.catchError(
+      (Object error, StackTrace stackTrace) {
+        Log.e('全屏状态切换失败: $error', stackTrace);
+      },
+    );
+    return queued;
   }
 
   /// 进入全屏
-  void enterFullScreen() async {
-    fullScreenState.value = true;
-    if (Platform.isAndroid || Platform.isIOS) {
-      //全屏
-      _systemUiChanged = true;
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      if (!isVertical.value) {
-        //横屏
-        _orientationChanged = true;
-        setLandscapeOrientation();
+  Future<void> enterFullScreen() {
+    final transitionId = ++_fullScreenTransitionId;
+    return _queueFullScreenOperation(() async {
+      if (transitionId != _fullScreenTransitionId) return;
+      if (Platform.isAndroid || Platform.isIOS) {
+        await SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: const [],
+        );
+        playerSystemLeaseCoordinator.markSystemUiChanged(_systemLeaseId);
+        if (!isVertical.value) {
+          await setLandscapeOrientation();
+          playerSystemLeaseCoordinator.markOrientationChanged(_systemLeaseId);
+        }
+      } else {
+        WindowService.instance.setFullScreenState(true);
+        // Linux 原生标题栏由根窗口壳永久隐藏；只在其它桌面平台
+        // 沿用原有标题栏切换，避免退出全屏时出现双标题栏。
+        if (!Platform.isLinux && await windowManager.isMaximized()) {
+          await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+        }
+        await windowManager.setFullScreen(true);
       }
-    } else {
-      WindowService.instance.setFullScreenState(true);
-      // Linux 原生标题栏由根窗口壳永久隐藏；只在其它桌面平台
-      // 沿用原有标题栏切换，避免退出全屏时出现双标题栏。
-      if (!Platform.isLinux && await windowManager.isMaximized()) {
-        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+      if (transitionId == _fullScreenTransitionId) {
+        fullScreenState.value = true;
       }
-      await windowManager.setFullScreen(true);
-    }
-    //danmakuController?.clear();
+    });
   }
 
   /// 退出全屏
-  void exitFull() async {
-    if (Platform.isAndroid || Platform.isIOS) {
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.edgeToEdge,
-        overlays: SystemUiOverlay.values,
-      );
-      _systemUiChanged = false;
-      setPortraitOrientation();
-      _orientationChanged = false;
-    } else {
-      WindowService.instance.setFullScreenState(false);
-      final isMaximized = await windowManager.isMaximized();
-      await windowManager.setFullScreen(false);
-      if (!Platform.isLinux && isMaximized) {
-        await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+  Future<void> exitFull() {
+    final transitionId = ++_fullScreenTransitionId;
+    return _queueFullScreenOperation(() async {
+      if (transitionId != _fullScreenTransitionId) return;
+      if (Platform.isAndroid || Platform.isIOS) {
+        await SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.edgeToEdge,
+          overlays: SystemUiOverlay.values,
+        );
+        playerSystemLeaseCoordinator.clearSystemUiChanged(_systemLeaseId);
+        await setPortraitOrientation();
+        playerSystemLeaseCoordinator.clearOrientationChanged(_systemLeaseId);
+      } else {
+        WindowService.instance.setFullScreenState(false);
+        final isMaximized = await windowManager.isMaximized();
+        await windowManager.setFullScreen(false);
+        if (!Platform.isLinux && isMaximized) {
+          await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+        }
       }
-    }
-    fullScreenState.value = false;
-
-    //danmakuController?.clear();
+      if (transitionId == _fullScreenTransitionId) {
+        fullScreenState.value = false;
+      }
+    });
   }
 
   Size? _lastWindowSize;
@@ -465,7 +485,7 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     if (await beforeIOS16()) {
       AutoOrientation.landscapeAutoMode();
     } else {
-      SystemChrome.setPreferredOrientations([
+      await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
@@ -740,7 +760,7 @@ mixin PlayerGestureControlMixin
       if (seek < 0) {
         seek = 0;
       }
-      _brightnessChanged = true;
+      playerSystemLeaseCoordinator.markBrightnessChanged(_systemLeaseId);
       screenBrightness.setApplicationScreenBrightness(seek);
 
       gestureTipText.value = "亮度 ${(seek * 100).toInt()}%";
@@ -752,7 +772,7 @@ mixin PlayerGestureControlMixin
         seek = 1;
       }
 
-      _brightnessChanged = true;
+      playerSystemLeaseCoordinator.markBrightnessChanged(_systemLeaseId);
       screenBrightness.setApplicationScreenBrightness(seek);
       gestureTipText.value = "亮度 ${(seek * 100).toInt()}%";
       Log.logPrint(value);
@@ -866,6 +886,7 @@ class PlayerController extends BaseController
 
     _playingSubscription = player.stream.playing.listen((event) {
       playerPausedState.value = !event;
+      mediaPlaying(event);
       if (event) {
         danmakuController?.resume();
         Log.d("Playing");
@@ -934,6 +955,8 @@ class PlayerController extends BaseController
     // 弱网调整：用户自责
     // WakelockPlus.disable();
   }
+
+  void mediaPlaying(bool playing) {}
 
   Future<void> toggleOSDStats() async {
     showOSDStats.value = !showOSDStats.value;
@@ -1057,6 +1080,7 @@ class PlayerController extends BaseController
   void onClose() {
     Log.w("播放器关闭");
     _closing = true;
+    ++_fullScreenTransitionId;
     if (cancelSmallWindowTransition()) {
       unawaited(exitSmallWindow());
     }
@@ -1082,9 +1106,14 @@ class PlayerController extends BaseController
       SchedulerBinding.instance.scheduleTask<void>(
         () async {
           closingDanmakuController?.clear();
-          await resetSystem();
-          if (runtimeInitialized) {
-            await player.dispose();
+          try {
+            await resetSystem();
+          } catch (error, stackTrace) {
+            Log.e('恢复播放器系统状态失败: $error', stackTrace);
+          } finally {
+            if (runtimeInitialized) {
+              await player.dispose();
+            }
           }
         },
         Priority.idle,
