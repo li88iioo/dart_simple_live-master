@@ -272,9 +272,6 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       volumeController.showSystemUI = false;
     }
 
-    // 屏幕常亮
-    //WakelockPlus.enable();
-
     // 开始隐藏计时
     resetHideControlsTimer();
   }
@@ -870,11 +867,9 @@ class PlayerController extends BaseController
     _playingSubscription = player.stream.playing.listen((event) {
       playerPausedState.value = !event;
       if (event) {
-        WakelockPlus.enable();
         danmakuController?.resume();
         Log.d("Playing");
       } else {
-        WakelockPlus.disable();
         danmakuController?.pause();
         Log.d("Paused");
       }
@@ -931,7 +926,8 @@ class PlayerController extends BaseController
   }
 
   void mediaEnd() {
-    WakelockPlus.disable();
+    // 常亮由 Video.wakelock 跟随真实 playing 状态释放。这里不能直接
+    // disable，否则直播线路自动重试且 playing 未重新发出时会永久丢锁。
   }
 
   void mediaError(String error) {

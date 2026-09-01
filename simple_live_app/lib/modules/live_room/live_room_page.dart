@@ -34,6 +34,11 @@ import 'package:simple_live_app/widgets/settings/settings_switch.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
+/// 播放器组件统一持有屏幕常亮，覆盖竖屏非全屏与全屏两种布局。
+/// 由 media_kit 根据真实 playing 状态自动引用计数并在组件销毁时释放。
+@visibleForTesting
+const bool kLiveRoomVideoWakelockEnabled = true;
+
 class LiveRoomPage extends GetView<LiveRoomController> {
   const LiveRoomPage({super.key});
 
@@ -279,8 +284,9 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             },
             aspectRatio: aspectRatio,
             fit: boxFit,
-            // 自己实现
-            wakelock: false,
+            // 交给 Video 跟随实际播放状态管理，避免非全屏播放或线路
+            // 自动重试后丢失系统的 FLAG_KEEP_SCREEN_ON。
+            wakelock: kLiveRoomVideoWakelockEnabled,
           ),
           if (giftPlacement != null)
             HuyaGiftDanmakuOverlay(

@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_live_app/modules/live_room/live_room_page.dart';
 
 void main() {
+  test('直播播放器在全屏与非全屏布局下统一启用组件级 wakelock', () {
+    expect(kLiveRoomVideoWakelockEnabled, isTrue);
+  });
+
   testWidgets('直播间 Tab 首次访问才挂载，并在往返切换后保留状态', (tester) async {
     final index = ValueNotifier<int>(0);
     final mounts = List<int>.filled(4, 0);
