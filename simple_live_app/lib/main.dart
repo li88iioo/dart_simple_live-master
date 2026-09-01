@@ -248,6 +248,8 @@ class MyApp extends StatelessWidget {
                                 if (!Platform.isAndroid && !Platform.isIOS) {
                                   if (await windowManager.isFullScreen()) {
                                     await windowManager.setFullScreen(false);
+                                    EventBus.instance
+                                        .emit(EventBus.kEscapePressed, 0);
                                     return;
                                   }
                                 }

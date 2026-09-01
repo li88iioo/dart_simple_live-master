@@ -182,6 +182,55 @@ void main() {
       }
     }
   });
+
+  testWidgets('礼物图片候选更新时丢弃旧回调且不会越界', (tester) async {
+    final firstEvent = _event(
+      nominalTotalYb: null,
+      giftImageUrl: 'https://cdn.example.com/gift/broken-a.webp',
+      giftEffectImageUrl: '',
+      giftImageUrls: const <String>[
+        'https://cdn.example.com/gift/broken-a.webp',
+        'https://cdn.example.com/gift/broken-b.webp',
+      ],
+    );
+    final updatedEvent = _event(
+      nominalTotalYb: null,
+      giftImageUrl: 'https://cdn.example.com/gift/safe.webp',
+      giftEffectImageUrl: '',
+      giftImageUrls: const <String>[
+        'https://cdn.example.com/gift/safe.webp',
+      ],
+    );
+
+    ImageProvider<Object> providerFor(String url) {
+      if (url.contains('/safe.webp')) return _memoryImage();
+      return MemoryImage(Uint8List(0));
+    }
+
+    Widget presentation(HuyaGiftDanmakuEvent event) {
+      return _testHost(
+        HuyaGiftPresentation(
+          event: event,
+          placement: HuyaGiftOverlayPlacement.chat,
+          maxWidth: huyaChatGiftMaxWidth,
+          reduceMotion: true,
+          imageProviderBuilder: providerFor,
+        ),
+      );
+    }
+
+    await tester.pumpWidget(presentation(firstEvent));
+    await tester.pump();
+    await tester.pumpWidget(presentation(updatedEvent));
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('huya-gift-remote-image')),
+      findsOneWidget,
+    );
+  });
 }
 
 Widget _testHost(Widget child) {
@@ -200,6 +249,7 @@ HuyaGiftDanmakuEvent _event({
   String giftName = '虎粮',
   int count = 3,
   String interactionText = '',
+  List<String> giftImageUrls = const <String>[],
 }) {
   return HuyaGiftDanmakuEvent(
     id: 'gift-test',
@@ -218,6 +268,7 @@ HuyaGiftDanmakuEvent _event({
     interactionText: interactionText,
     giftImageUrl: giftImageUrl,
     giftEffectImageUrl: giftEffectImageUrl,
+    giftImageUrls: giftImageUrls,
     nominalTotalYb: nominalTotalYb,
   );
 }

@@ -578,11 +578,13 @@ class _GiftRemoteImage extends StatefulWidget {
 class _GiftRemoteImageState extends State<_GiftRemoteImage> {
   int _candidateIndex = 0;
   bool _advanceScheduled = false;
+  int _candidateGeneration = 0;
 
   @override
   void didUpdateWidget(covariant _GiftRemoteImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!listEquals(oldWidget.imageUrls, widget.imageUrls)) {
+      _candidateGeneration++;
       _candidateIndex = 0;
       _advanceScheduled = false;
     }
@@ -593,10 +595,16 @@ class _GiftRemoteImageState extends State<_GiftRemoteImage> {
       return;
     }
     _advanceScheduled = true;
+    final scheduledGeneration = _candidateGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || scheduledGeneration != _candidateGeneration) return;
+      final nextIndex = _candidateIndex + 1;
+      if (nextIndex >= widget.imageUrls.length) {
+        _advanceScheduled = false;
+        return;
+      }
       setState(() {
-        _candidateIndex++;
+        _candidateIndex = nextIndex;
         _advanceScheduled = false;
       });
     });
@@ -604,8 +612,12 @@ class _GiftRemoteImageState extends State<_GiftRemoteImage> {
 
   @override
   Widget build(BuildContext context) {
+    final safeCandidateIndex = _candidateIndex.clamp(
+      0,
+      widget.imageUrls.length - 1,
+    );
     final normalizedUrl = _normalizeGiftImageUrl(
-      widget.imageUrls[_candidateIndex],
+      widget.imageUrls[safeCandidateIndex],
     );
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final cacheDimension = math.max(

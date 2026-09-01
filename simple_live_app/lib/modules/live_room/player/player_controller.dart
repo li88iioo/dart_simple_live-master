@@ -357,52 +357,110 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
 
   Size? _lastWindowSize;
   Offset? _lastWindowPosition;
+  Future<void> _smallWindowOperation = Future<void>.value();
+  int _smallWindowTransitionId = 0;
+  bool _smallWindowEntryPending = false;
+
+  Future<void> _queueSmallWindowOperation(
+    Future<void> Function() operation,
+  ) {
+    final queued = _smallWindowOperation.then((_) => operation());
+    _smallWindowOperation = queued.catchError(
+      (Object error, StackTrace stackTrace) {
+        Log.logPrint(error);
+      },
+    );
+    return _smallWindowOperation;
+  }
+
+  bool cancelSmallWindowTransition() {
+    final shouldRestore = _smallWindowEntryPending ||
+        smallWindowState.value ||
+        _lastWindowSize != null ||
+        _lastWindowPosition != null;
+    _smallWindowTransitionId++;
+    _smallWindowEntryPending = false;
+    return shouldRestore;
+  }
 
   ///小窗模式()
-  void enterSmallWindow() async {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      fullScreenState.value = true;
-      smallWindowState.value = true;
-      WindowService.instance.setPIP(smallWindowState.value);
-
-      // 读取窗口大小
-      _lastWindowSize = await windowManager.getSize();
-      _lastWindowPosition = await windowManager.getPosition();
-
-      if (!Platform.isLinux) {
-        windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-      }
-      // 获取视频窗口大小
-      var width = player.state.width ?? 16;
-      var height = player.state.height ?? 9;
-
-      // 横屏还是竖屏
-      if (height > width) {
-        var aspectRatio = width / height;
-        windowManager.setSize(Size(400, 400 / aspectRatio));
-      } else {
-        var aspectRatio = height / width;
-        windowManager.setSize(Size(280 / aspectRatio, 280));
-      }
-
-      windowManager.setAlwaysOnTop(true);
+  Future<void> enterSmallWindow() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return Future<void>.value();
     }
+    if (smallWindowState.value || _smallWindowEntryPending) {
+      return _smallWindowOperation;
+    }
+
+    final transitionId = ++_smallWindowTransitionId;
+    _smallWindowEntryPending = true;
+    return _queueSmallWindowOperation(() async {
+      try {
+        if (transitionId != _smallWindowTransitionId) return;
+
+        // 必须先完成恢复点快照，再暴露小窗状态。进入和退出统一进入串行队列，
+        // 避免快速关闭直播间时，迟到的异步窗口命令再次开启 PIP 或置顶。
+        final previousSize = await windowManager.getSize();
+        if (transitionId != _smallWindowTransitionId) return;
+        final previousPosition = await windowManager.getPosition();
+        if (transitionId != _smallWindowTransitionId) return;
+
+        _lastWindowSize = previousSize;
+        _lastWindowPosition = previousPosition;
+        fullScreenState.value = true;
+        smallWindowState.value = true;
+        WindowService.instance.setPIP(true);
+
+        if (!Platform.isLinux) {
+          await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+          if (transitionId != _smallWindowTransitionId) return;
+        }
+
+        final width = player.state.width ?? 16;
+        final height = player.state.height ?? 9;
+        if (height > width) {
+          final aspectRatio = width / height;
+          await windowManager.setSize(Size(400, 400 / aspectRatio));
+        } else {
+          final aspectRatio = height / width;
+          await windowManager.setSize(Size(280 / aspectRatio, 280));
+        }
+        if (transitionId != _smallWindowTransitionId) return;
+        await windowManager.setAlwaysOnTop(true);
+      } finally {
+        _smallWindowEntryPending = false;
+      }
+    });
   }
 
   ///退出小窗模式()
-  void exitSmallWindow() {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
+  Future<void> exitSmallWindow() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return Future<void>.value();
+    }
+
+    ++_smallWindowTransitionId;
+    _smallWindowEntryPending = false;
+    return _queueSmallWindowOperation(() async {
+      final previousSize = _lastWindowSize;
+      final previousPosition = _lastWindowPosition;
       fullScreenState.value = false;
       smallWindowState.value = false;
-      WindowService.instance.setPIP(smallWindowState.value);
+      WindowService.instance.setPIP(false);
       if (!Platform.isLinux) {
-        windowManager.setTitleBarStyle(TitleBarStyle.normal);
+        await windowManager.setTitleBarStyle(TitleBarStyle.normal);
       }
-      windowManager.setSize(_lastWindowSize!);
-      windowManager.setPosition(_lastWindowPosition!);
-      windowManager.setAlwaysOnTop(false);
+      if (previousSize != null) {
+        await windowManager.setSize(previousSize);
+      }
+      if (previousPosition != null) {
+        await windowManager.setPosition(previousPosition);
+      }
+      _lastWindowSize = null;
+      _lastWindowPosition = null;
+      await windowManager.setAlwaysOnTop(false);
       //windowManager.setAlignment(Alignment.center);
-    }
+    });
   }
 
   /// 设置横屏
@@ -1003,8 +1061,8 @@ class PlayerController extends BaseController
   void onClose() {
     Log.w("播放器关闭");
     _closing = true;
-    if (smallWindowState.value) {
-      exitSmallWindow();
+    if (cancelSmallWindowTransition()) {
+      unawaited(exitSmallWindow());
     }
 
     final runtimeInitialized = _playerRuntimeInitialized;

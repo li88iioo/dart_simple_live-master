@@ -938,6 +938,154 @@ void main() {
       );
     });
 
+    test('6541 使用 messageId 精确去重且不误删连续同款礼物', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final effect = HYLiveRoomLargeConsumptionEffectNotice()
+        ..presenterUid = _presenterUid
+        ..effectId = 70002
+        ..customerUid = 9901
+        ..customerNick = '连续送礼用户'
+        ..itemName = '星河飞船'
+        ..effectParams = <String, String>{'PAYTOTAL': '188000'};
+      final payload = _encodeStruct(effect);
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.bigGiftEffect,
+          payload: payload,
+          groupId: '',
+          messageId: 960,
+        ),
+      );
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.bigGiftEffect,
+          payload: payload,
+          groupId: '',
+          messageId: 960,
+        ),
+      );
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.bigGiftEffect,
+          payload: payload,
+          groupId: '',
+          messageId: 961,
+        ),
+      );
+
+      expect(messages, hasLength(2));
+      expect(
+        messages.map((message) => (message.data as Map)['messageId']),
+        <int>[960, 961],
+      );
+    });
+
+    test('6501 与 6541 同一高价值礼物只进入 UI 一次', () {
+      HYLiveRoomLargeConsumptionEffectNotice effect() {
+        return HYLiveRoomLargeConsumptionEffectNotice()
+          ..presenterUid = _presenterUid
+          ..effectId = 70003
+          ..customerUid = 9910
+          ..customerNick = '高价值用户'
+          ..itemName = '星河飞船'
+          ..effectParams = <String, String>{
+            'PAYTOTAL': '188000',
+            'PAYID': 'cross-kind-payment',
+          };
+      }
+
+      HYSendItemSubBroadcastPacket transaction() {
+        return _gift(
+          payId: 'cross-kind-payment',
+          senderUid: 9910,
+          senderNick: '高价值用户',
+          propsName: '星河飞船',
+          payTotal: 188000,
+        );
+      }
+
+      final transactionFirst = <LiveMessage>[];
+      final firstDanmaku = _createDanmaku(transactionFirst);
+      firstDanmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(transaction()),
+          messageId: 970,
+        ),
+      );
+      firstDanmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.bigGiftEffect,
+          payload: _encodeStruct(effect()),
+          groupId: '',
+          messageId: 971,
+        ),
+      );
+
+      final effectFirst = <LiveMessage>[];
+      final secondDanmaku = _createDanmaku(effectFirst);
+      secondDanmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.bigGiftEffect,
+          payload: _encodeStruct(effect()),
+          groupId: '',
+          messageId: 972,
+        ),
+      );
+      secondDanmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(transaction()),
+          messageId: 973,
+        ),
+      );
+
+      expect(transactionFirst, hasLength(1));
+      expect((transactionFirst.single.data as Map)['kind'], 'giftTransaction');
+      expect(effectFirst, hasLength(1));
+      expect((effectFirst.single.data as Map)['kind'], 'giftEffectNotice');
+    });
+
+    test('缺少共同交易标识时不按用户、礼物名和金额模糊去重', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final effect = HYLiveRoomLargeConsumptionEffectNotice()
+        ..presenterUid = _presenterUid
+        ..effectId = 70004
+        ..customerUid = 9911
+        ..customerNick = '连续送礼用户'
+        ..itemName = '星河飞船'
+        ..effectParams = <String, String>{'PAYTOTAL': '188000'};
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.giftSubChannel,
+          payload: _encodeStruct(
+            _gift(
+              payId: 'transaction-without-shared-id',
+              senderUid: 9911,
+              senderNick: '连续送礼用户',
+              propsName: '星河飞船',
+              payTotal: 188000,
+            ),
+          ),
+          messageId: 980,
+        ),
+      );
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.bigGiftEffect,
+          payload: _encodeStruct(effect),
+          groupId: '',
+          messageId: 981,
+        ),
+      );
+
+      expect(messages, hasLength(2));
+    });
+
     test('礼物扩展字段、效果信息和互动业务数据完整透传', () {
       final messages = <LiveMessage>[];
       final danmaku = _createDanmaku(messages);

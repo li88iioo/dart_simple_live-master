@@ -31,6 +31,8 @@ class HuyaDanmaku implements LiveDanmaku {
   static const Duration _giftCatalogWait = Duration(milliseconds: 1200);
   static const int _maxPendingGifts = 100;
   static const int _giftDuplicateTtlMs = 2 * 60 * 1000;
+  static const int _giftEffectFallbackDuplicateTtlMs = 3 * 1000;
+  static const int _giftCrossKindDuplicateTtlMs = 15 * 1000;
   static const int _giftDuplicateCleanupInterval = 128;
   static const int _maxGiftDuplicateEntries = 4096;
   static const int _nobleDecorationAppId = 10200;
@@ -70,6 +72,8 @@ class HuyaDanmaku implements LiveDanmaku {
   final Map<int, HYPropsItem> _giftCatalog = <int, HYPropsItem>{};
   final List<_PendingHuyaGift> _pendingGifts = <_PendingHuyaGift>[];
   final Map<String, int> _giftDuplicateCache = <String, int>{};
+  final Map<String, _HuyaGiftCrossKindEntry> _giftCrossKindDuplicateCache =
+      <String, _HuyaGiftCrossKindEntry>{};
 
   Timer? _giftCatalogTimer;
   Timer? _registerAckTimer;
@@ -95,6 +99,7 @@ class HuyaDanmaku implements LiveDanmaku {
     _giftCatalog.clear();
     _pendingGifts.clear();
     _giftDuplicateCache.clear();
+    _giftCrossKindDuplicateCache.clear();
     _giftDuplicateChecks = 0;
     _giftCatalogTimer?.cancel();
     _registerAckTimer?.cancel();
@@ -257,6 +262,7 @@ class HuyaDanmaku implements LiveDanmaku {
     _registerAttempt = 0;
     _pendingGifts.clear();
     _giftDuplicateCache.clear();
+    _giftCrossKindDuplicateCache.clear();
     _giftDuplicateChecks = 0;
     onMessage = null;
     onClose = null;
@@ -669,7 +675,10 @@ class HuyaDanmaku implements LiveDanmaku {
     return key.isNotEmpty && _rememberGiftDuplicateKey(key);
   }
 
-  bool _rememberGiftDuplicateKey(String key) {
+  bool _rememberGiftDuplicateKey(
+    String key, {
+    int ttlMs = _giftDuplicateTtlMs,
+  }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final expiresAt = _giftDuplicateCache[key];
     if (expiresAt != null && expiresAt > now) return true;
@@ -677,7 +686,7 @@ class HuyaDanmaku implements LiveDanmaku {
       _giftDuplicateCache.remove(key);
     }
 
-    _giftDuplicateCache[key] = now + _giftDuplicateTtlMs;
+    _giftDuplicateCache[key] = now + ttlMs;
     _giftDuplicateChecks++;
     if (_giftDuplicateChecks >= _giftDuplicateCleanupInterval ||
         _giftDuplicateCache.length > _maxGiftDuplicateEntries) {
@@ -688,6 +697,58 @@ class HuyaDanmaku implements LiveDanmaku {
       }
     }
     return false;
+  }
+
+  bool _isCrossKindGiftDuplicate({
+    required _HuyaGiftSourceKind source,
+    required Iterable<String> keys,
+  }) {
+    final normalizedKeys =
+        keys.map((key) => key.trim()).where((key) => key.isNotEmpty).toSet();
+    if (normalizedKeys.isEmpty) return false;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    var duplicate = false;
+    for (final key in normalizedKeys) {
+      final entry = _giftCrossKindDuplicateCache[key];
+      if (entry == null) continue;
+      if (entry.expiresAt <= now) {
+        _giftCrossKindDuplicateCache.remove(key);
+        continue;
+      }
+      if (entry.source != source) duplicate = true;
+    }
+    if (duplicate) return true;
+
+    final expiresAt = now + _giftCrossKindDuplicateTtlMs;
+    for (final key in normalizedKeys) {
+      _giftCrossKindDuplicateCache[key] = _HuyaGiftCrossKindEntry(
+        source: source,
+        expiresAt: expiresAt,
+      );
+    }
+    if (_giftCrossKindDuplicateCache.length > _maxGiftDuplicateEntries) {
+      _giftCrossKindDuplicateCache.removeWhere(
+        (_, entry) => entry.expiresAt <= now,
+      );
+      while (_giftCrossKindDuplicateCache.length > _maxGiftDuplicateEntries) {
+        _giftCrossKindDuplicateCache.remove(
+          _giftCrossKindDuplicateCache.keys.first,
+        );
+      }
+    }
+    return false;
+  }
+
+  Iterable<String> _giftCrossKindKeys({
+    required int messageId,
+    String paymentId = "",
+  }) sync* {
+    if (messageId > 0) yield "message:$messageId";
+    final normalizedPaymentId = paymentId.trim().toLowerCase();
+    if (normalizedPaymentId.isNotEmpty) {
+      yield "payment:$normalizedPaymentId";
+    }
   }
 
   void _flushPendingGifts() {
@@ -722,6 +783,15 @@ class HuyaDanmaku implements LiveDanmaku {
         catalogUnitPriceYb == null ? null : catalogUnitPriceYb * count;
     final sendContent = gift.sendContent.trim();
     final customText = gift.customText.trim();
+    if (_isCrossKindGiftDuplicate(
+      source: _HuyaGiftSourceKind.transaction,
+      keys: _giftCrossKindKeys(
+        messageId: pending.messageId,
+        paymentId: gift.payId,
+      ),
+    )) {
+      return;
+    }
 
     onMessage?.call(
       LiveMessage(
@@ -828,6 +898,23 @@ class HuyaDanmaku implements LiveDanmaku {
     return 0;
   }
 
+  String _effectPaymentId(Map<String, String> params) {
+    const keys = <String>{
+      "payid",
+      "paymentid",
+      "orderid",
+      "transactionid",
+      "billno",
+      "payno",
+    };
+    for (final entry in params.entries) {
+      if (!keys.contains(entry.key.trim().toLowerCase())) continue;
+      final value = entry.value.trim();
+      if (value.isNotEmpty) return value;
+    }
+    return "";
+  }
+
   void _handleGiftEffectMessage(
     List<int> msg, {
     required int uri,
@@ -846,9 +933,28 @@ class HuyaDanmaku implements LiveDanmaku {
               : "虎牙用户";
       final itemName =
           effect.itemName.trim().isNotEmpty ? effect.itemName.trim() : "高价值礼物";
-      final duplicateKey =
-          "effect:${effect.effectId}:${effect.customerUid}:$itemName";
-      if (_rememberGiftDuplicateKey(duplicateKey)) return;
+      final payTotal = _effectParamInt(effect.effectParams);
+      final paymentId = _effectPaymentId(effect.effectParams);
+      final duplicateKey = messageId > 0
+          ? "effect-message:$messageId"
+          : "effect:${effect.effectId}:${effect.customerUid}:$itemName:$payTotal";
+      if (_rememberGiftDuplicateKey(
+        duplicateKey,
+        ttlMs: messageId > 0
+            ? _giftDuplicateTtlMs
+            : _giftEffectFallbackDuplicateTtlMs,
+      )) {
+        return;
+      }
+      if (_isCrossKindGiftDuplicate(
+        source: _HuyaGiftSourceKind.effect,
+        keys: _giftCrossKindKeys(
+          messageId: messageId,
+          paymentId: paymentId,
+        ),
+      )) {
+        return;
+      }
 
       onMessage?.call(
         LiveMessage(
@@ -870,7 +976,8 @@ class HuyaDanmaku implements LiveDanmaku {
             "giftId": effect.effectId,
             "count": 1,
             "itemCount": 1,
-            "payTotal": _effectParamInt(effect.effectParams),
+            "payTotal": payTotal,
+            if (paymentId.isNotEmpty) "payId": paymentId,
             "isBigEffect": true,
             "effectParams": effect.effectParams,
             "giftEffectUrls": effect.effectParams.values
@@ -970,5 +1077,20 @@ class _PendingHuyaGift {
     required this.uri,
     required this.groupId,
     required this.messageId,
+  });
+}
+
+enum _HuyaGiftSourceKind {
+  transaction,
+  effect,
+}
+
+class _HuyaGiftCrossKindEntry {
+  final _HuyaGiftSourceKind source;
+  final int expiresAt;
+
+  const _HuyaGiftCrossKindEntry({
+    required this.source,
+    required this.expiresAt,
   });
 }
