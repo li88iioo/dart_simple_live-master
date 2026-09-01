@@ -451,11 +451,43 @@ class HYLiveRoomLargeConsumptionEffectNotice extends TarsStruct {
   void displayAsString(StringBuffer sb, int level) {}
 }
 
-/// URI 6110: 当前网页使用的贵宾进场横幅。
+/// URI 6110 中携带的用户爵位信息。
+///
+/// 虎牙会直接下发本地化后的爵位名，例如“剑士”。无爵位用户的
+/// [name] 为空且 [level] 为 0，调用方不应为其伪造通用爵位。
+class HYNobleInfo extends TarsStruct {
+  String name = "";
+  int level = 0;
+
+  @override
+  void readFrom(TarsInputStream _is) {
+    name = _is.read(name, 3, false);
+    level = _is.read(level, 4, false);
+  }
+
+  @override
+  void writeTo(TarsOutputStream _os) {
+    _os.write(name, 3);
+    _os.write(level, 4);
+  }
+
+  @override
+  Object deepCopy() {
+    return HYNobleInfo()
+      ..name = name
+      ..level = level;
+  }
+
+  @override
+  void displayAsString(StringBuffer sb, int level) {}
+}
+
+/// URI 6110: 当前网页使用的用户进场横幅。
 class HYVipEnterBanner extends TarsStruct {
   int uid = 0;
   String nickName = "";
   int pid = 0;
+  HYNobleInfo nobleInfo = HYNobleInfo();
   String logoUrl = "";
 
   @override
@@ -463,6 +495,7 @@ class HYVipEnterBanner extends TarsStruct {
     uid = _is.read(uid, 0, false);
     nickName = _is.read(nickName, 1, false);
     pid = _is.read(pid, 2, false);
+    nobleInfo = _is.readTarsStruct(nobleInfo, 3, false) as HYNobleInfo;
     logoUrl = _is.read(logoUrl, 6, false);
   }
 
@@ -471,6 +504,7 @@ class HYVipEnterBanner extends TarsStruct {
     _os.write(uid, 0);
     _os.write(nickName, 1);
     _os.write(pid, 2);
+    _os.write(nobleInfo, 3);
     _os.write(logoUrl, 6);
   }
 
@@ -480,6 +514,7 @@ class HYVipEnterBanner extends TarsStruct {
       ..uid = uid
       ..nickName = nickName
       ..pid = pid
+      ..nobleInfo = nobleInfo.deepCopy() as HYNobleInfo
       ..logoUrl = logoUrl;
   }
 

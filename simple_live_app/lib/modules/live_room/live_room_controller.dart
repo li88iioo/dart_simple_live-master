@@ -387,9 +387,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         vipCount.value = count;
       }
     } else if (msg.type == LiveMessageType.vipEnter) {
-      // 虎牙热门房间进场事件频率很高，即使放在独立状态轨也会产生持续
-      // 明暗闪烁。普通进场事件不参与贵宾数，也不进入聊天 UI。
-      if (site.id != Constant.kHuya && msg.message.isNotEmpty) {
+      // 进场事件只进入普通聊天流，不参与贵宾人数推算，也不再占用独立
+      // 固定区域；其视觉样式由聊天气泡设置统一控制。
+      if (msg.message.isNotEmpty) {
         _addEventMessage(msg);
       }
     }

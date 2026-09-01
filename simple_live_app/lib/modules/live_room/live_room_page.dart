@@ -15,6 +15,7 @@ import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/chat/huya_fans_badge.dart';
+import 'package:simple_live_app/modules/live_room/chat/huya_noble_badge.dart';
 import 'package:simple_live_app/modules/live_room/gift/huya_gift_danmaku_overlay.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
@@ -584,17 +585,17 @@ class LiveRoomPage extends GetView<LiveRoomController> {
       final fontSize = AppSettingsController.instance.chatTextSize.value;
       final bubbleStyle = AppSettingsController.instance.chatBubbleStyle.value;
 
-      if (isSystem || isGift || isVipEnter) {
-        final accent = isGift
-            ? colors.huya
-            : isVipEnter
-                ? const Color(0xFF8F73C8)
-                : colors.textTertiary;
-        final icon = isGift
-            ? Remix.gift_line
-            : isVipEnter
-                ? Remix.vip_crown_line
-                : Remix.information_line;
+      if (isVipEnter) {
+        return HuyaVipEnterMessage(
+          message: message,
+          fontSize: fontSize,
+          bubbleStyle: bubbleStyle,
+        );
+      }
+
+      if (isSystem || isGift) {
+        final accent = isGift ? colors.huya : colors.textTertiary;
+        final icon = isGift ? Remix.gift_line : Remix.information_line;
         return SliveGlassSurface(
           variant: SliveGlassVariant.card,
           radius: 15,

@@ -673,6 +673,10 @@ class HuyaDanmaku implements LiveDanmaku {
               : "";
       if (nickName.isEmpty) return;
 
+      final nobleName = banner.nobleInfo.name.trim();
+      final nobleLevel = banner.nobleInfo.level;
+      final hasNoble = nobleName.isNotEmpty && nobleLevel > 0;
+
       onMessage?.call(
         LiveMessage(
           type: LiveMessageType.vipEnter,
@@ -685,9 +689,11 @@ class HuyaDanmaku implements LiveDanmaku {
             "pid": banner.pid,
             "nickName": nickName,
             "logoUrl": banner.logoUrl,
+            if (hasNoble) "nobleName": nobleName,
+            if (hasNoble) "nobleLevel": nobleLevel,
           },
           color: LiveMessageColor.white,
-          message: "⭐ $nickName 进入直播间",
+          message: "$nickName 进入直播间",
           userName: nickName,
         ),
       );

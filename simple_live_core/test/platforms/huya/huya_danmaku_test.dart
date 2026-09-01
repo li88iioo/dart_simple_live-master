@@ -381,6 +381,9 @@ void main() {
         ..uid = 90001
         ..nickName = '贵宾用户'
         ..pid = _presenterUid
+        ..nobleInfo = (HYNobleInfo()
+          ..name = '剑士'
+          ..level = 1)
         ..logoUrl = 'https://example.invalid/avatar.png';
 
       danmaku.decodeMessage(
@@ -397,10 +400,35 @@ void main() {
       final data = messages.single.data as Map;
       expect(data['messageId'], 102);
       expect(data['groupId'], _liveGroup);
+      expect(data['nobleName'], '剑士');
+      expect(data['nobleLevel'], 1);
+      expect(messages.single.message, isNot(startsWith('⭐')));
       expect(
         messages.where((e) => e.type == LiveMessageType.vipCount),
         isEmpty,
       );
+    });
+
+    test('V2 普通用户进场不伪造爵位字段', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final banner = HYVipEnterBanner()
+        ..uid = 90002
+        ..nickName = '普通用户'
+        ..pid = _presenterUid;
+
+      danmaku.decodeMessage(
+        _wrapPushV2(
+          uri: HuyaPushUri.vipEnterBanner,
+          payload: _encodeStruct(banner),
+          messageId: 103,
+        ),
+      );
+
+      final data = messages.single.data as Map;
+      expect(data.containsKey('nobleName'), isFalse);
+      expect(data.containsKey('nobleLevel'), isFalse);
+      expect(messages.single.message, '普通用户 进入直播间');
     });
 
     test('解析真实抓包的 URI 6501 礼物事实字段', () {
