@@ -39,7 +39,7 @@
     </screenshot>
   </screenshots>
   <releases>
-    <release version="1.8.16" date="2026-09-02">
+    <release version="1.8.16" date="2026-09-01">
       <description>
         <p>- 完善虎牙高价值礼物、互动礼物与礼物文案解析，增强图标回退、事件去重和异常协议兼容</p>
         <p>- 优化全屏与非全屏礼物展示，降低视觉遮挡并改善送礼用户名、礼物名称和数量的完整显示</p>
