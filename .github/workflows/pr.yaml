@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -88,15 +88,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Flutter stable SDK archives currently expose Linux x64 only.
+          # ARM64 uses the action's source checkout path while pubspec still pins 3.41.9.
           - runner: ubuntu-24.04
             arch: x86_64
+            flutter_channel: stable
           - runner: ubuntu-24.04-arm
             arch: aarch64
+            flutter_channel: master
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -104,7 +108,7 @@ jobs:
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version-file: simple_live_app/pubspec.yaml
-          channel: stable
+          channel: ${{ matrix.flutter_channel }}
           cache: true
 
       - name: Install Linux dependencies
@@ -154,7 +158,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
