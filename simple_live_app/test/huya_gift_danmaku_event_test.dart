@@ -228,6 +228,35 @@ void main() {
     expect(queue.advance(), isNull);
   });
 
+  test('普通礼物和高价值礼物使用不同的低干扰停留时间', () {
+    final normal = _event('normal');
+    final highlight = HuyaGiftDanmakuEvent(
+      id: 'highlight',
+      sender: '用户',
+      senderIcon: '',
+      giftName: '高价值礼物',
+      giftId: 2,
+      count: 1,
+      effectType: 0,
+      colorEffectType: 0,
+      comboScore: 0,
+      effectResourceUrl: '',
+      effectWebResourceUrl: '',
+      effectPcResourceUrl: '',
+      effectResourceAttr: '',
+      nominalTotalYb: huyaGiftHighlightThresholdYb,
+    );
+
+    expect(
+      resolveHuyaGiftDisplayDuration(normal),
+      const Duration(milliseconds: 2100),
+    );
+    expect(
+      resolveHuyaGiftDisplayDuration(highlight),
+      const Duration(milliseconds: 2600),
+    );
+  });
+
   test('普通播放器弹幕关闭不参与虎牙礼物接收条件', () {
     const showDanmakuState = false;
 

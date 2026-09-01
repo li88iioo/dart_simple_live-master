@@ -14,6 +14,7 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/app/utils.dart';
+import 'package:simple_live_app/modules/live_room/chat/huya_fans_badge.dart';
 import 'package:simple_live_app/modules/live_room/gift/huya_gift_danmaku_overlay.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
@@ -630,19 +631,33 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         );
       }
 
+      final fansBadge = HuyaFansBadge.fromMessage(message);
       final content = Text.rich(
         TextSpan(
-          text: "${message.userName}：",
-          style: TextStyle(
-            color: colors.textSecondary,
-            fontSize: fontSize,
-            fontWeight: FontWeight.w600,
-          ),
           children: [
+            if (fansBadge != null) ...[
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: HuyaFansBadgeChip(
+                  badge: fansBadge,
+                  fontSize: fontSize,
+                ),
+              ),
+              const WidgetSpan(child: SizedBox(width: 5)),
+            ],
+            TextSpan(
+              text: "${message.userName}：",
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: fontSize,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             TextSpan(
               text: message.message,
               style: TextStyle(
                 color: colors.textPrimary,
+                fontSize: fontSize,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1415,19 +1430,22 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
         onNotification: _handleChatScroll,
         child: Stack(
           children: [
-            ListView.separated(
-              controller: widget.controller.scrollController,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              addAutomaticKeepAlives: false,
-              separatorBuilder: (_, i) => SizedBox(height: gap),
-              // Tab 栏是浮层：隐藏后不继续占用顶部空间，避免出现一条
-              // 无意义的空白带；同时不动画 padding，防止滚动位置抖动。
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-              itemCount: widget.controller.messages.length,
-              itemBuilder: (_, i) {
-                final item = widget.controller.messages[i];
-                return widget.messageItemBuilder(context, item);
-              },
+            Positioned.fill(
+              child: ListView.separated(
+                controller: widget.controller.scrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                addAutomaticKeepAlives: false,
+                separatorBuilder: (_, i) => SizedBox(height: gap),
+                // Tab 栏是浮层：隐藏后不继续占用顶部空间，避免出现一条
+                // 无意义的空白带；同时不动画 padding，防止滚动位置抖动。
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                itemCount: widget.controller.messages.length,
+                itemBuilder: (_, i) {
+                  final item = widget.controller.messages[i];
+                  return widget.messageItemBuilder(context, item);
+                },
+              ),
             ),
             HuyaGiftDanmakuOverlay(
               controller: widget.controller,
@@ -1436,19 +1454,29 @@ class _LiveRoomMessageAreaState extends State<_LiveRoomMessageArea>
             if (widget.controller.disableAutoScroll.value)
               Positioned(
                 right: 12,
-                bottom: 12,
-                child: SliveGlassSurface(
-                  variant: SliveGlassVariant.pill,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  onTap: widget.controller.resumeChatAutoScroll,
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.arrow_downward_rounded, size: 16),
-                      SizedBox(width: 4),
-                      Text('最新'),
-                    ],
+                bottom: 10,
+                child: SizedBox(
+                  height: 34,
+                  child: SliveGlassSurface(
+                    variant: SliveGlassVariant.pill,
+                    enableBackdropBlur: false,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    onTap: widget.controller.resumeChatAutoScroll,
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_downward_rounded, size: 14),
+                        SizedBox(width: 4),
+                        Text(
+                          '最新',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

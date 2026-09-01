@@ -295,6 +295,65 @@ void main() {
   });
 
   group('虎牙事实型消息解析', () {
+    test('URI 1400 从真实 10400 装饰前缀解析粉丝牌', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final notice = HYMessage()
+        ..userInfo = (HYSender()
+          ..uid = 10001
+          ..nickName = '粉丝用户')
+        ..content = '测试弹幕'
+        ..decorationPrefix = <HYDecorationInfo>[
+          HYDecorationInfo()
+            ..appId = 10400
+            ..viewType = 0
+            ..data = base64.decode(
+              'EhGPyvA2Bualmuays0ANzPwR+hIGABkMC/oTAmirXeMcLDxMXGwL8BYB+hkGABwgAgv8Gg==',
+            ),
+        ];
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.chat,
+          payload: _encodeStruct(notice),
+          messageId: 100,
+        ),
+      );
+
+      expect(messages, hasLength(1));
+      expect(messages.single.type, LiveMessageType.chat);
+      final data = messages.single.data as Map;
+      expect(data['uid'], 10001);
+      expect(data['fanBadge'], {
+        'id': 294636272,
+        'name': '楚河',
+        'level': 13,
+        'appId': 10400,
+        'viewType': 0,
+      });
+    });
+
+    test('无有效 10400 装饰时普通弹幕不伪造粉丝牌', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final notice = HYMessage()
+        ..userInfo = (HYSender()
+          ..uid = 10002
+          ..nickName = '普通用户')
+        ..content = '普通弹幕';
+
+      danmaku.decodeMessage(
+        _wrapPush(
+          uri: HuyaPushUri.chat,
+          payload: _encodeStruct(notice),
+          messageId: 101,
+        ),
+      );
+
+      final data = messages.single.data as Map;
+      expect(data.containsKey('fanBadge'), isFalse);
+    });
+
     test('解析真实抓包的 URI 6211 贵宾人数快照', () {
       final messages = <LiveMessage>[];
       final danmaku = _createDanmaku(messages);
@@ -335,6 +394,9 @@ void main() {
       expect(messages, hasLength(1));
       expect(messages.single.type, LiveMessageType.vipEnter);
       expect(messages.single.message, contains('贵宾用户'));
+      final data = messages.single.data as Map;
+      expect(data['messageId'], 102);
+      expect(data['groupId'], _liveGroup);
       expect(
         messages.where((e) => e.type == LiveMessageType.vipCount),
         isEmpty,

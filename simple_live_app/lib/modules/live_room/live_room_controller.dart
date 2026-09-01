@@ -88,7 +88,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// 虎牙礼物特效只保留一个活动项和少量待显示项，防止礼物高峰堆积动画。
   final Rxn<HuyaGiftDanmakuEvent> activeHuyaGiftEffect =
       Rxn<HuyaGiftDanmakuEvent>();
-  final HuyaGiftDanmakuQueue _huyaGiftQueue = HuyaGiftDanmakuQueue();
+  final HuyaGiftDanmakuQueue _huyaGiftQueue =
+      HuyaGiftDanmakuQueue(maxPending: 1);
   Timer? _huyaGiftEffectTimer;
   Worker? _huyaGiftSettingWorker;
   Worker? _huyaGiftLiveStatusWorker;
@@ -386,8 +387,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         vipCount.value = count;
       }
     } else if (msg.type == LiveMessageType.vipEnter) {
-      // vipEnter 只代表单个进场事件，不参与贵宾总数计算。
-      if (msg.message.isNotEmpty) {
+      // 虎牙热门房间进场事件频率很高，即使放在独立状态轨也会产生持续
+      // 明暗闪烁。普通进场事件不参与贵宾数，也不进入聊天 UI。
+      if (site.id != Constant.kHuya && msg.message.isNotEmpty) {
         _addEventMessage(msg);
       }
     }
@@ -457,9 +459,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   void _presentActiveHuyaGift() {
     _huyaGiftEffectTimer?.cancel();
     activeHuyaGiftEffect.value = _huyaGiftQueue.active;
-    if (_huyaGiftQueue.active == null) return;
+    final event = _huyaGiftQueue.active;
+    if (event == null) return;
 
-    _huyaGiftEffectTimer = Timer(const Duration(milliseconds: 3400), () {
+    _huyaGiftEffectTimer = Timer(resolveHuyaGiftDisplayDuration(event), () {
       _huyaGiftQueue.advance();
       _presentActiveHuyaGift();
     });

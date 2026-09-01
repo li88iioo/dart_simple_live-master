@@ -156,6 +156,13 @@ class HuyaGiftDanmakuQueue {
   }
 }
 
+/// 普通礼物短暂提示，高价值礼物仅多停留少量时间，不长期遮挡画面。
+Duration resolveHuyaGiftDisplayDuration(HuyaGiftDanmakuEvent event) {
+  return event.isHighlight
+      ? const Duration(milliseconds: 2600)
+      : const Duration(milliseconds: 2100);
+}
+
 enum GiftMessageUiAction {
   appendText,
   showHuyaEffect,

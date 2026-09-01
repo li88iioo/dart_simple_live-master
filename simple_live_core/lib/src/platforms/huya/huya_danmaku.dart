@@ -33,6 +33,7 @@ class HuyaDanmaku implements LiveDanmaku {
   static const int _giftDuplicateTtlMs = 2 * 60 * 1000;
   static const int _giftDuplicateCleanupInterval = 128;
   static const int _maxGiftDuplicateEntries = 4096;
+  static const int _fansBadgeDecorationAppId = 10400;
 
   final Duration registerAckTimeout;
   final int maxRegisterAttempts;
@@ -413,7 +414,12 @@ class HuyaDanmaku implements LiveDanmaku {
         );
         break;
       case HuyaPushUri.vipEnterBanner:
-        _handleVipEnter(msg, uri: uri);
+        _handleVipEnter(
+          msg,
+          uri: uri,
+          groupId: groupId,
+          messageId: messageId,
+        );
         break;
       case HuyaPushUri.vipBarCount:
         _handleVipBarCount(msg, uri: uri);
@@ -435,9 +441,19 @@ class HuyaDanmaku implements LiveDanmaku {
     if (notice.content.isEmpty) return;
 
     final color = notice.bulletFormat.fontColor;
+    final fansBadge = _parseFansBadge(notice.decorationPrefix);
     onMessage?.call(
       LiveMessage(
         type: LiveMessageType.chat,
+        data: {
+          "kind": "chat",
+          "uid": notice.userInfo.uid,
+          "tid": notice.tid,
+          "sid": notice.sid,
+          "pid": notice.pid,
+          "iconUrl": notice.iconUrl,
+          if (fansBadge != null) "fanBadge": fansBadge,
+        },
         color: color <= 0
             ? LiveMessageColor.white
             : LiveMessageColor.numberToColor(color),
@@ -445,6 +461,33 @@ class HuyaDanmaku implements LiveDanmaku {
         userName: notice.userInfo.nickName,
       ),
     );
+  }
+
+  Map<String, dynamic>? _parseFansBadge(
+    List<HYDecorationInfo> decorations,
+  ) {
+    for (final decoration in decorations) {
+      if (decoration.appId != _fansBadgeDecorationAppId ||
+          decoration.data.isEmpty) {
+        continue;
+      }
+      try {
+        final badge = HYFansBadgeInfo()
+          ..readFrom(TarsInputStream(decoration.data));
+        final badgeName = badge.badgeName.trim();
+        if (badgeName.isEmpty || badge.badgeLevel <= 0) continue;
+        return <String, dynamic>{
+          "id": badge.badgeId,
+          "name": badgeName,
+          "level": badge.badgeLevel,
+          "appId": decoration.appId,
+          "viewType": decoration.viewType,
+        };
+      } catch (_) {
+        // 装饰前缀是可选协议；单条异常不能影响普通聊天弹幕。
+      }
+    }
+    return null;
   }
 
   void _handleOnlineCount(List<int> msg) {
@@ -613,7 +656,12 @@ class HuyaDanmaku implements LiveDanmaku {
     );
   }
 
-  void _handleVipEnter(List<int> msg, {required int uri}) {
+  void _handleVipEnter(
+    List<int> msg, {
+    required int uri,
+    required String groupId,
+    required int messageId,
+  }) {
     try {
       final banner = HYVipEnterBanner();
       banner.readFrom(TarsInputStream(Uint8List.fromList(msg)));
@@ -631,6 +679,8 @@ class HuyaDanmaku implements LiveDanmaku {
           data: {
             "kind": "vipEnter",
             "uri": uri,
+            "groupId": groupId,
+            "messageId": messageId,
             "uid": banner.uid,
             "pid": banner.pid,
             "nickName": nickName,
