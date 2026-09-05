@@ -11,6 +11,8 @@ analyzer:
   errors:
     unintended_html_in_doc_comment: ignore
   exclude:
+    # Native 构建生成的 cargokit 子包包含容器绝对路径，不属于应用源码。
+    - "build/**"
     - "**/frb_generated.web.dart"
     # cargokit is a vendored build tool with its own package and analyzer rules.
     - "rust_builder/cargokit/**"

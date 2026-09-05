@@ -1,23 +1,18 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:extended_image/extended_image.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/theme/slive_theme.dart';
 import 'package:simple_live_app/modules/live_room/gift/huya_gift_danmaku_event.dart';
+import 'package:simple_live_app/modules/live_room/gift/huya_gift_remote_image.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 
-enum HuyaGiftOverlayPlacement {
-  player,
-  chat,
-}
+enum HuyaGiftOverlayPlacement { player, chat }
 
 typedef HuyaGiftImageProviderBuilder = ImageProvider<Object> Function(
-  String url,
-);
+    String url);
 
 /// 非全屏礼物借鉴虎牙原生的“弹幕顶部礼物轨”：短内容按需收拢，
 /// 长昵称、长礼物名和大数量可扩展并自然换行，不以省略号换取固定高度。
@@ -30,12 +25,13 @@ const double huyaPlayerGiftMinHeight = 58;
 
 /// 全屏礼物只占播放器安全边缘的一小块区域，不制作中央舞台。
 double resolveHuyaGiftPlayerMaxWidth(double viewportWidth) {
+  // 竖屏/窄窗口必须先放得下图标、文字与数量；宽屏仍保持原有低遮挡上限。
+  final availableWidth = viewportWidth < 720
+      ? viewportWidth - 28
+      : viewportWidth * huyaPlayerGiftViewportFraction;
   return math.max(
     1.0,
-    math.min(
-      huyaPlayerGiftAbsoluteMaxWidth,
-      viewportWidth * huyaPlayerGiftViewportFraction,
-    ),
+    math.min(huyaPlayerGiftAbsoluteMaxWidth, availableWidth),
   );
 }
 
@@ -78,12 +74,13 @@ double resolveHuyaChatGiftPreferredWidth(
   );
 
   final senderWidth = measure(event.sender, senderStyle);
-  final detailWidth = measure('送出 ${event.giftName}', detailStyle);
+  final detailWidth = measure(event.description, detailStyle);
   final interactionWidth = event.interactionText.isEmpty
       ? 0.0
       : measure(event.interactionText, detailStyle);
-  final countWidth =
-      math.max(38.0, measure('×${event.count}', countStyle) + 16);
+  final countWidth = event.quantityLabel == null
+      ? 0.0
+      : math.max(38.0, measure(event.quantityLabel!, countStyle) + 16);
   final copyWidth = math.max(
     senderWidth,
     math.max(detailWidth, interactionWidth),
@@ -131,7 +128,9 @@ class HuyaGiftDanmakuOverlay extends StatelessWidget {
                 : MediaQuery.sizeOf(context).width;
             final cardMaxWidth = _isChat
                 ? math.min(
-                    huyaChatGiftMaxWidth, math.max(1.0, viewportWidth - 24))
+                    huyaChatGiftMaxWidth,
+                    math.max(1.0, viewportWidth - 24),
+                  )
                 : resolveHuyaGiftPlayerMaxWidth(viewportWidth);
             final padding = _isChat
                 ? const EdgeInsets.fromLTRB(12, 50, 12, 12)
@@ -165,19 +164,15 @@ class HuyaGiftDanmakuOverlay extends StatelessWidget {
                     switchOutCurve: Curves.easeInCubic,
                     transitionBuilder: (child, animation) {
                       if (reduceMotion) return child;
-                      final curved = CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                        reverseCurve: Curves.easeInCubic,
-                      );
+                      // Switcher 已应用进出曲线；不要在 rebuild 中创建未释放的监听。
                       final slide = Tween<Offset>(
                         begin: _isChat
                             ? const Offset(0.018, -0.008)
                             : const Offset(-0.018, 0.012),
                         end: Offset.zero,
-                      ).animate(curved);
+                      ).animate(animation);
                       return FadeTransition(
-                        opacity: curved,
+                        opacity: animation,
                         child: SlideTransition(position: slide, child: child),
                       );
                     },
@@ -349,32 +344,66 @@ class _GiftEdgeCard extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(9, 7, 10, 7),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _GiftArtwork(
-                  imageUrls: imageUrls,
-                  size: artworkSize,
-                  accent: accent,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final copy = _GiftCopy(
+                  event: event,
+                  foreground: foreground,
+                  secondary: secondary,
                   playerPlacement: _isPlayer,
-                  imageProviderBuilder: imageProviderBuilder,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _GiftCopy(
-                    event: event,
-                    foreground: foreground,
-                    secondary: secondary,
-                    playerPlacement: _isPlayer,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _GiftCountBadge(
-                  count: event.count,
-                  accent: accent,
-                  playerPlacement: _isPlayer,
-                ),
-              ],
+                );
+                final badge = event.quantityLabel == null
+                    ? null
+                    : _GiftCountBadge(
+                        label: event.quantityLabel!,
+                        accent: accent,
+                        playerPlacement: _isPlayer,
+                      );
+                // 数量区不可挤成零宽文字列。窄卡/大字时改为独立下一行，
+                // 图片仍保持固定占位，异步加载不会改变此布局决策。
+                final quantityWidth = badge == null
+                    ? 0.0
+                    : event.quantityLabel!.length *
+                            MediaQuery.textScalerOf(context).scale(11.5) +
+                        16;
+                final compact = constraints.maxWidth <
+                    artworkSize +
+                        8 +
+                        (_isPlayer ? 96 : 64) +
+                        (badge == null ? 0 : 8 + quantityWidth);
+                final row = Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _GiftArtwork(
+                      imageUrls: imageUrls,
+                      eventId: event.id,
+                      isGuardian: event.isGuardian,
+                      size: artworkSize,
+                      accent: accent,
+                      playerPlacement: _isPlayer,
+                      imageProviderBuilder: imageProviderBuilder,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: copy),
+                    if (!compact && badge != null) ...[
+                      const SizedBox(width: 8),
+                      badge,
+                    ],
+                  ],
+                );
+                if (!compact || badge == null) return row;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    row,
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FittedBox(fit: BoxFit.scaleDown, child: badge),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -431,7 +460,7 @@ class _GiftCopy extends StatelessWidget {
         ),
         const SizedBox(height: 3),
         Text(
-          '送出 ${event.giftName}',
+          event.description,
           key: const ValueKey('huya-gift-name'),
           softWrap: true,
           style: TextStyle(
@@ -464,12 +493,12 @@ class _GiftCopy extends StatelessWidget {
 
 class _GiftCountBadge extends StatelessWidget {
   const _GiftCountBadge({
-    required this.count,
+    required this.label,
     required this.accent,
     required this.playerPlacement,
   });
 
-  final int count;
+  final String label;
   final Color accent;
   final bool playerPlacement;
 
@@ -483,7 +512,7 @@ class _GiftCountBadge extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Text(
-          '×$count',
+          label,
           key: const ValueKey('huya-gift-count'),
           maxLines: 1,
           softWrap: false,
@@ -504,6 +533,8 @@ class _GiftCountBadge extends StatelessWidget {
 class _GiftArtwork extends StatelessWidget {
   const _GiftArtwork({
     required this.imageUrls,
+    required this.eventId,
+    this.isGuardian = false,
     required this.size,
     required this.accent,
     required this.playerPlacement,
@@ -511,6 +542,8 @@ class _GiftArtwork extends StatelessWidget {
   });
 
   final List<String> imageUrls;
+  final String eventId;
+  final bool isGuardian;
   final double size;
   final Color accent;
   final bool playerPlacement;
@@ -520,7 +553,7 @@ class _GiftArtwork extends StatelessWidget {
   Widget build(BuildContext context) {
     final fallback = Center(
       child: Icon(
-        Icons.card_giftcard_rounded,
+        isGuardian ? Icons.shield_outlined : Icons.card_giftcard_rounded,
         size: size * 0.44,
         color: accent.withValues(alpha: 0.78),
       ),
@@ -546,7 +579,8 @@ class _GiftArtwork extends StatelessWidget {
           ),
           child: imageUrls.isEmpty
               ? fallback
-              : _GiftRemoteImage(
+              : HuyaGiftRemoteImage(
+                  key: ValueKey(eventId),
                   imageUrls: imageUrls,
                   size: size,
                   fallback: fallback,
@@ -556,114 +590,4 @@ class _GiftArtwork extends StatelessWidget {
       ),
     );
   }
-}
-
-class _GiftRemoteImage extends StatefulWidget {
-  const _GiftRemoteImage({
-    required this.imageUrls,
-    required this.size,
-    required this.fallback,
-    required this.imageProviderBuilder,
-  });
-
-  final List<String> imageUrls;
-  final double size;
-  final Widget fallback;
-  final HuyaGiftImageProviderBuilder? imageProviderBuilder;
-
-  @override
-  State<_GiftRemoteImage> createState() => _GiftRemoteImageState();
-}
-
-class _GiftRemoteImageState extends State<_GiftRemoteImage> {
-  int _candidateIndex = 0;
-  bool _advanceScheduled = false;
-  int _candidateGeneration = 0;
-
-  @override
-  void didUpdateWidget(covariant _GiftRemoteImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!listEquals(oldWidget.imageUrls, widget.imageUrls)) {
-      _candidateGeneration++;
-      _candidateIndex = 0;
-      _advanceScheduled = false;
-    }
-  }
-
-  void _tryNextCandidate() {
-    if (_advanceScheduled || _candidateIndex + 1 >= widget.imageUrls.length) {
-      return;
-    }
-    _advanceScheduled = true;
-    final scheduledGeneration = _candidateGeneration;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || scheduledGeneration != _candidateGeneration) return;
-      final nextIndex = _candidateIndex + 1;
-      if (nextIndex >= widget.imageUrls.length) {
-        _advanceScheduled = false;
-        return;
-      }
-      setState(() {
-        _candidateIndex = nextIndex;
-        _advanceScheduled = false;
-      });
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final safeCandidateIndex = _candidateIndex.clamp(
-      0,
-      widget.imageUrls.length - 1,
-    );
-    final normalizedUrl = _normalizeGiftImageUrl(
-      widget.imageUrls[safeCandidateIndex],
-    );
-    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final cacheDimension = math.max(
-      1,
-      math.min(160, (widget.size * pixelRatio).round()),
-    );
-    final imageProvider = widget.imageProviderBuilder?.call(normalizedUrl) ??
-        ExtendedResizeImage.resizeIfNeeded(
-          provider: ExtendedNetworkImageProvider(
-            normalizedUrl,
-            cache: true,
-            printError: false,
-            retries: 1,
-            timeLimit: const Duration(seconds: 5),
-            headers: const <String, String>{
-              'Referer': 'https://www.huya.com/',
-              'User-Agent':
-                  'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Mobile Safari/537.36',
-            },
-          ),
-          cacheWidth: cacheDimension,
-          cacheHeight: cacheDimension,
-        );
-
-    return Image(
-      key: const ValueKey('huya-gift-remote-image'),
-      image: imageProvider,
-      width: widget.size,
-      height: widget.size,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.low,
-      gaplessPlayback: true,
-      excludeFromSemantics: true,
-      errorBuilder: (_, error, stackTrace) {
-        _tryNextCandidate();
-        return widget.fallback;
-      },
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded || frame != null) return child;
-        return widget.fallback;
-      },
-    );
-  }
-}
-
-String _normalizeGiftImageUrl(String imageUrl) {
-  final trimmed = imageUrl.trim();
-  return trimmed.startsWith('//') ? 'https:$trimmed' : trimmed;
 }

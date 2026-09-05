@@ -869,31 +869,158 @@ void main() {
       expect(messages, hasLength(2));
     });
 
-    test('6501/6502/6507/6514 的同一支付交易只展示一次', () {
+    for (final fixtureName in ['word', 'game']) {
+      test('$fixtureName 使用独立字段布局解析当前房间广播', () {
+        final fixtures = jsonDecode(
+            File('test/platforms/huya/fixtures/gift_wire.json')
+                .readAsStringSync()) as Map;
+        final fixture = fixtures[fixtureName] as Map;
+        final messages = <LiveMessage>[];
+        final danmaku = _createDanmaku(messages);
+        danmaku.decodeMessage(_wrapCatalogResponse([
+          HYPropsItem()
+            ..propsId = 9907
+            ..propsName = '测试大礼物'
+            ..propsYb = 188000,
+        ]));
+        for (final v2 in [false, true]) {
+          final wrap = v2 ? _wrapPushV2 : _wrapPush;
+          danmaku.decodeMessage(wrap(
+            uri: fixture['uri'] as int,
+            payload: base64Decode(fixture['payloadBase64'] as String),
+            groupId: '',
+            messageId: 900,
+          ));
+        }
+        expect(messages, hasLength(1));
+        final data = messages.single.data as Map;
+        expect(data['kind'], 'giftBroadcast');
+        expect(data['giftId'], 9907);
+        expect(data['count'], 3);
+        expect(data['senderUid'], 10001);
+        expect(data['presenterUid'], _presenterUid);
+        expect(data['giftName'], '测试大礼物');
+        expect(data['catalogNominalTotalYb'], 564000);
+        expect(data['payId'], isEmpty);
+      });
+    }
+
+    test('游戏区广播不能将送礼者当成收礼主播，也不能虚构零数量送礼', () {
+      final fixtures = jsonDecode(
+          File('test/platforms/huya/fixtures/gift_wire.json')
+              .readAsStringSync()) as Map;
       final messages = <LiveMessage>[];
       final danmaku = _createDanmaku(messages);
-      final payload = _encodeStruct(
-        _gift(payId: 'cross-channel-payment')..itemGroup = 3,
-      );
-      final uris = <int>[
-        HuyaPushUri.giftSubChannel,
-        HuyaPushUri.giftTopChannel,
-        HuyaPushUri.giftGameBroadcast,
-        HuyaPushUri.giftOtherBroadcast,
-      ];
-
-      for (var index = 0; index < uris.length; index++) {
-        danmaku.decodeMessage(
-          _wrapPush(
-            uri: uris[index],
-            payload: payload,
-            messageId: 900 + index,
-          ),
-        );
+      for (final name in ['gameWrongPresenter', 'gameZeroCount']) {
+        final fixture = fixtures[name] as Map;
+        danmaku.decodeMessage(_wrapPush(
+          uri: fixture['uri'] as int,
+          payload: base64Decode(fixture['payloadBase64'] as String),
+          messageId: 901,
+        ));
       }
+      expect(messages, isEmpty);
+    });
 
+    test('伪装成 6502/6507 的 6501 包必须拒绝，不能靠换 URI 通过测试', () {
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      for (final uri in [6502, 6507]) {
+        danmaku.decodeMessage(_wrapPush(
+          uri: uri,
+          payload: _encodeStruct(_gift()),
+          messageId: uri,
+        ));
+      }
+      expect(messages, isEmpty);
+    });
+
+    test('未实现的通知不能通过 6501 解码伪造礼物，日志限次且无用户内容', () {
+      final messages = <LiveMessage>[];
+      final logs = <String>[];
+      final oldPrint = CoreLog.onPrintLog;
+      CoreLog.onPrintLog = (_, message) => logs.add(message);
+      addTearDown(() => CoreLog.onPrintLog = oldPrint);
+      final danmaku = _createDanmaku(messages);
+      for (final uri in [6540, 6249, 1020003]) {
+        for (var i = 0; i < 3; i++) {
+          danmaku.decodeMessage(_wrapPush(
+              uri: uri, payload: _encodeStruct(_gift()), messageId: uri));
+        }
+      }
+      expect(messages, isEmpty);
+      expect(logs, hasLength(3));
+      expect(logs.join(), isNot(contains('测试用户')));
+      expect(logs.join(), isNot(contains('pay-1')));
+    });
+
+    test('type16 的合法 UTF-8 字节也不能当互动文案展示', () {
+      final messages = <LiveMessage>[];
+      const icon = 'https://cdn.example.com/special/gift.png';
+      // 独立写入 NonResourceItemEffect tag 0，其他字段为可选。
+      // 这些 JCE 字节恰好是合法 UTF-8 且不含 NUL，不能用 UTF-8 可解码性判断语义。
+      final resource = (TarsOutputStream()..writeString(icon, 0)).toUint8List();
+      expect(() => utf8.decode(resource), returnsNormally);
+      final gift = _gift(payId: 'binary-is-not-text')
+        ..bizData = [
+          HYItemEffectBizData()
+            ..type = 16
+            ..data = resource
+        ];
+      _createDanmaku(messages).decodeMessage(_wrapPush(
+        uri: HuyaPushUri.giftSubChannel,
+        payload: _encodeStruct(gift),
+      ));
+      final data = messages.single.data as Map;
+      expect(data['giftImageUrls'], contains(icon));
+      final biz = (data['bizData'] as List).single as Map;
+      expect(biz['dataBase64'], base64Encode(resource));
+      expect(biz['text'], isEmpty);
+    });
+
+    test('特殊礼物 type16 二进制资源可见，且不依赖通用目录条目', () {
+      final fixtures = jsonDecode(
+          File('test/platforms/huya/fixtures/gift_wire.json')
+              .readAsStringSync()) as Map;
+      final bytes =
+          base64Decode(fixtures['nonResource16']['payloadBase64'] as String);
+      final messages = <LiveMessage>[];
+      final danmaku = _createDanmaku(messages);
+      final gift = _gift(itemType: 9907, propsName: '测试守护礼物', itemCount: 2)
+        ..bizData = [
+          HYItemEffectBizData()
+            ..type = 16
+            ..data = bytes
+        ];
+      danmaku.decodeMessage(_wrapPush(uri: 6501, payload: _encodeStruct(gift)));
       expect(messages, hasLength(1));
-      expect((messages.single.data as Map)['uri'], HuyaPushUri.giftSubChannel);
+      final data = messages.single.data as Map;
+      expect(data['giftName'], '测试守护礼物');
+      expect(data['giftImageUrls'],
+          contains('https://cdn.example.com/special/shield.webp'));
+      expect(data['giftImageUrls'],
+          contains('https://cdn.example.com/special/shield108.png'));
+      expect(data['giftEffectUrls'],
+          contains('https://cdn.example.com/special/shield.svga'));
+      expect(data['giftEffectUrls'],
+          contains('https://cdn.example.com/special/shield-god.svga'));
+      expect(data['resourcePropsId'], 'shield-custom-16');
+      expect(data['resourceNominalTotalYb'], 376000);
+      expect(data['catalogUnitPriceYb'], isNull);
+    });
+
+    test('type16 损坏仅降级资源，不丢送礼事实，也不泄露二进制内容', () {
+      final messages = <LiveMessage>[];
+      final gift = _gift()
+        ..bizData = [
+          HYItemEffectBizData()
+            ..type = 16
+            ..data = Uint8List.fromList([0, 1, 2])
+        ];
+      _createDanmaku(messages)
+          .decodeMessage(_wrapPush(uri: 6501, payload: _encodeStruct(gift)));
+      expect(messages, hasLength(1));
+      expect((messages.single.data as Map)['giftName'], '虎粮');
     });
 
     test('6541 高价值礼物特效可解析为可展示礼物事件', () {
@@ -928,6 +1055,8 @@ void main() {
       expect(messages.single.type, LiveMessageType.gift);
       final data = messages.single.data as Map;
       expect(data['kind'], 'giftEffectNotice');
+      expect(data['giftId'], 0); // effectId 不能冒充 propsId。
+      expect(data['countKnown'], isFalse);
       expect(data['giftName'], '星河飞船');
       expect(data['sender'], '高价值用户');
       expect(data['payTotal'], 188000);
@@ -1044,8 +1173,20 @@ void main() {
 
       expect(transactionFirst, hasLength(1));
       expect((transactionFirst.single.data as Map)['kind'], 'giftTransaction');
-      expect(effectFirst, hasLength(1));
-      expect((effectFirst.single.data as Map)['kind'], 'giftEffectNotice');
+      expect(effectFirst, hasLength(2));
+      final initial = effectFirst.first.data as Map;
+      final replacement = effectFirst.last.data as Map;
+      expect(initial['kind'], 'giftEffectNotice');
+      expect(replacement['kind'], 'giftTransaction');
+      expect(replacement['replacesEventId'], initial['eventId']);
+      expect(replacement['count'], transaction().itemCount);
+      // replace 是完整事实快照，不是在已展示特效上再累计一次送礼。
+      secondDanmaku.decodeMessage(_wrapPush(
+        uri: HuyaPushUri.giftSubChannel,
+        payload: _encodeStruct(transaction()),
+        messageId: 974,
+      ));
+      expect(effectFirst, hasLength(2));
     });
 
     test('缺少共同交易标识时不按用户、礼物名和金额模糊去重', () {

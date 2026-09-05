@@ -1,0 +1,46 @@
+{
+  "word": {
+    "uri": 6502,
+    "payloadBase64": "ASazEAMhMDkxJxFGDOa1i+ivleeUqOaIt1MAAAAAh3DMZ2YM5rWL6K+V5Li75pKtcAKAA5ABwCDWAnt98RMD5g=="
+  },
+  "game": {
+    "uri": 6507,
+    "payloadBase64": "ASazEAMxJxFGDOa1i+ivleeUqOaIt1MAAAAAh3DMZ2YM5rWL6K+V5Li75pKtcTA5ggABCTKRA+agIA=="
+  },
+  "gameWrongPresenter": {
+    "uri": 6507,
+    "payloadBase64": "ASazEAMzAAAAAIdwzGdGDOWFtuS7lueUqOaIt1AJZgzlhbbku5bkuLvmkq1xMDmCAAEJMpED5qAg"
+  },
+  "gameZeroCount": {
+    "uri": 6507,
+    "payloadBase64": "ASazHDEnEUYM5rWL6K+V55So5oi3UwAAAACHcMxn"
+  },
+  "nonResource16": {
+    "uri": 0,
+    "payloadBase64": "BiUvL2Nkbi5leGFtcGxlLmNvbS9zcGVjaWFsL3NoaWVsZC53ZWJwGgABEAIgAwspDDkAAQoJAAEKFi9odHRwczovL2Nkbi5leGFtcGxlLmNvbS9zcGVjaWFsL3NoaWVsZC1nb2Quc3ZnYQsZAAEKBiYvL2Nkbi5leGFtcGxlLmNvbS9zcGVjaWFsL3NoaWVsZDE4LnBuZzY0aHR0cHM6Ly9jZG4uZXhhbXBsZS5jb20vc3BlY2lhbC9zaGllbGQuc3ZnYSZjaGVja3N1bWYnLy9jZG4uZXhhbXBsZS5jb20vc3BlY2lhbC9zaGllbGQxMDgucG5n9hEvaHR0cHM6Ly9jZG4uZXhhbXBsZS5jb20vc3BlY2lhbC9zaGllbGQtdmFwLmpzb24LIAELTFxiAALeYHYQc2hpZWxkLWN1c3RvbS0xNg=="
+  },
+  "specialGiftV2": {
+    "uri": 6501,
+    "commandBase64": "ABYdAAEB4QYPbGl2ZToyMjcyMzE2NTE5GQABCgEZZR0AAQHAASazFg9maXh0dXJlLXBheW1lbnQgAjMAAAAAh3DMZ0EnEVYM5rWL6K+V5Li75pKtZiHlrozmlbTnmoTnibnmrornpLznianpgIHnpLznlKjmiLf2FBjmtYvor5XnibnmrorlrojmiqTnpLznian5KgABCgAQHQABAUUGJS8vY2RuLmV4YW1wbGUuY29tL3NwZWNpYWwvc2hpZWxkLndlYnAaAAEQAiADCykMOQABCgkAAQoWL2h0dHBzOi8vY2RuLmV4YW1wbGUuY29tL3NwZWNpYWwvc2hpZWxkLWdvZC5zdmdhCxkAAQoGJi8vY2RuLmV4YW1wbGUuY29tL3NwZWNpYWwvc2hpZWxkMTgucG5nNjRodHRwczovL2Nkbi5leGFtcGxlLmNvbS9zcGVjaWFsL3NoaWVsZC5zdmdhJmNoZWNrc3VtZicvL2Nkbi5leGFtcGxlLmNvbS9zcGVjaWFsL3NoaWVsZDEwOC5wbmf2ES9odHRwczovL2Nkbi5leGFtcGxlLmNvbS9zcGVjaWFsL3NoaWVsZC12YXAuanNvbgsgAQtMXGIAAt5gdhBzaGllbGQtY3VzdG9tLTE2CyEDhQs="
+  },
+  "specialGiftAsciiV2": {
+    "uri": 6501,
+    "commandBase64": "ABYdAAEAywYPbGl2ZToyMjcyMzE2NTE5GQABCgEZZR0AAQCqASazFhVmaXh0dXJlLWFzY2lpLXBheW1lbnQgAjMAAAAAh3DMZ0EnEVYM5rWL6K+V5Li75pKtZiHlrozmlbTnmoTnibnmrornpLznianpgIHnpLznlKjmiLf2FBjmtYvor5XnibnmrorlrojmiqTnpLznian5KgABCgAQHQAAKgYoaHR0cHM6Ly9jZG4uZXhhbXBsZS5jb20vc3BlY2lhbC9naWZ0LnBuZwshA4YL"
+  },
+  "effectBeforeTransactionV1": {
+    "uri": 6541,
+    "commandBase64": "AAcdAAB9DBEZjS0AAGEDAAAAAIdwzGcSAAERcSMAAAABKgXyATYM6YCB56S855So5oi3hgzmtYvor5XnpLzniamYAAIGBVBBWUlEFhBwaXBlbGluZS1wYXltZW50BghQQVlUT1RBTBYGMTAwMDAwPEYPbGl2ZToyMjcyMzE2NTE5UAo="
+  },
+  "transactionGroup1V1": {
+    "uri": 6501,
+    "commandBase64": "AAcdAABvDBEZZS0AAFMABBYQcGlwZWxpbmUtcGF5bWVudCACMwAAAACHcMxnQwAAAAEqBfIBVgbkuLvmkq1mDOmAgeekvOeUqOaIt4ACkAH2FAzmtYvor5XnpLznian8+jxGD2xpdmU6MjI3MjMxNjUxOVAL"
+  },
+  "transactionGroup2V1": {
+    "uri": 6501,
+    "commandBase64": "AAcdAABvDBEZZS0AAFMABBYQcGlwZWxpbmUtcGF5bWVudCADMwAAAACHcMxnQwAAAAEqBfIBVgbkuLvmkq1mDOmAgeekvOeUqOaIt4ADkAL2FAzmtYvor5XnpLznian8+jxGD2xpdmU6MjI3MjMxNjUxOVAM"
+  },
+  "transactionGroup2ReplayV1": {
+    "uri": 6501,
+    "commandBase64": "AAcdAABvDBEZZS0AAFMABBYQcGlwZWxpbmUtcGF5bWVudCADMwAAAACHcMxnQwAAAAEqBfIBVgbkuLvmkq1mDOmAgeekvOeUqOaIt4ADkAL2FAzmtYvor5XnpLznian8+jxGD2xpdmU6MjI3MjMxNjUxOVAN"
+  }
+}

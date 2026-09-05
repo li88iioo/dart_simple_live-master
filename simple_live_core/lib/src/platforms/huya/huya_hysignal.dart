@@ -6,6 +6,8 @@ import 'package:tars_dart/tars/codec/tars_input_stream.dart';
 import 'package:tars_dart/tars/codec/tars_output_stream.dart';
 import 'package:tars_dart/tars/codec/tars_struct.dart';
 
+import 'huya_tars_utils.dart';
+
 class HuyaHySignalCommandType {
   const HuyaHySignalCommandType._();
 
@@ -27,9 +29,12 @@ class HuyaPushUri {
   static const int vipBarCount = 6211;
   static const int vipBarSimpleList = 6213;
   static const int giftSubChannel = 6501;
+  // 兼容既有名称：6502 实际是文字广播，不是 6501 的另一个频道。
   static const int giftTopChannel = 6502;
   static const int giftGameBroadcast = 6507;
+  static const int giftActivityBroadcast = 6508;
   static const int giftOtherBroadcast = 6514;
+  static const int guardianNotice = 1020001;
   static const int bigGiftEffect = 6541;
   static const int attendeeCount = 8006;
 }
@@ -165,51 +170,52 @@ class HYSendItemSubBroadcastPacket extends TarsStruct {
 
   @override
   void readFrom(TarsInputStream _is) {
-    itemType = _is.read(itemType, 0, false);
+    itemType = readHuyaSignedInt(_is, 0, false);
     payId = _is.read(payId, 1, false);
-    itemCount = _is.read(itemCount, 2, false);
-    presenterUid = _is.read(presenterUid, 3, false);
-    senderUid = _is.read(senderUid, 4, false);
+    itemCount = readHuyaSignedInt(_is, 2, false);
+    presenterUid = readHuyaSignedInt(_is, 3, false);
+    senderUid = readHuyaSignedInt(_is, 4, false);
     presenterNick = _is.read(presenterNick, 5, false);
     senderNick = _is.read(senderNick, 6, false);
     sendContent = _is.read(sendContent, 7, false);
-    itemCountByGroup = _is.read(itemCountByGroup, 8, false);
-    itemGroup = _is.read(itemGroup, 9, false);
-    superPurpleLevel = _is.read(superPurpleLevel, 10, false);
-    comboScore = _is.read(comboScore, 11, false);
-    displayInfo = _is.read(displayInfo, 12, false);
-    effectType = _is.read(effectType, 13, false);
+    itemCountByGroup = readHuyaSignedInt(_is, 8, false);
+    itemGroup = readHuyaSignedInt(_is, 9, false);
+    superPurpleLevel = readHuyaSignedInt(_is, 10, false);
+    comboScore = readHuyaSignedInt(_is, 11, false);
+    displayInfo = readHuyaSignedInt(_is, 12, false);
+    effectType = readHuyaSignedInt(_is, 13, false);
     senderIcon = _is.read(senderIcon, 14, false);
     presenterIcon = _is.read(presenterIcon, 15, false);
-    templateType = _is.read(templateType, 16, false);
+    templateType = readHuyaSignedInt(_is, 16, false);
     expand = _is.read(expand, 17, false);
     business = _is.read(business, 18, false);
-    colorEffectType = _is.read(colorEffectType, 19, false);
+    colorEffectType = readHuyaSignedInt(_is, 19, false);
     propsName = _is.read(propsName, 20, false);
-    accept = _is.read(accept, 21, false);
-    eventType = _is.read(eventType, 22, false);
-    roomId = _is.read(roomId, 24, false);
-    homeOwnerUid = _is.read(homeOwnerUid, 25, false);
-    payType = _is.read(payType, 27, false);
-    nobleLevel = _is.read(nobleLevel, 28, false);
+    accept = readHuyaSignedInt(_is, 21, false);
+    eventType = readHuyaSignedInt(_is, 22, false);
+    roomId = readHuyaSignedInt(_is, 24, false);
+    homeOwnerUid = readHuyaSignedInt(_is, 25, false);
+    // 缺失时保留协议的未知支付类型 -1；显式 0 是另一种事实。
+    payType = readHuyaSignedInt(_is, 27, false, defaultValue: -1);
+    nobleLevel = readHuyaSignedInt(_is, 28, false);
     effectInfo = _is.readTarsStruct(
       effectInfo,
       30,
       false,
     ) as HYItemEffectInfo;
-    comboStatus = _is.read(comboStatus, 32, false);
-    pidColorType = _is.read(pidColorType, 33, false);
-    multiSend = _is.read(multiSend, 34, false);
-    vFanLevel = _is.read(vFanLevel, 35, false);
-    upgradeLevel = _is.read(upgradeLevel, 36, false);
+    comboStatus = readHuyaSignedInt(_is, 32, false);
+    pidColorType = readHuyaSignedInt(_is, 33, false);
+    multiSend = readHuyaSignedInt(_is, 34, false);
+    vFanLevel = readHuyaSignedInt(_is, 35, false);
+    upgradeLevel = readHuyaSignedInt(_is, 36, false);
     customText = _is.read(customText, 37, false);
     diyEffect = _is.readTarsStruct(
       diyEffect,
       38,
       false,
     ) as HYDIYBigGiftEffect;
-    comboSeqId = _is.read(comboSeqId, 39, false);
-    payTotal = _is.read(payTotal, 41, false);
+    comboSeqId = readHuyaSignedInt(_is, 39, false);
+    payTotal = readHuyaSignedInt(_is, 41, false);
     bizData = _is.readList<HYItemEffectBizData>(
       [HYItemEffectBizData()],
       42,
@@ -318,10 +324,10 @@ class HYItemEffectInfo extends TarsStruct {
 
   @override
   void readFrom(TarsInputStream _is) {
-    priceLevel = _is.read(priceLevel, 0, false);
-    streamDuration = _is.read(streamDuration, 1, false);
-    showType = _is.read(showType, 2, false);
-    streamId = _is.read(streamId, 3, false);
+    priceLevel = readHuyaSignedInt(_is, 0, false);
+    streamDuration = readHuyaSignedInt(_is, 1, false);
+    showType = readHuyaSignedInt(_is, 2, false);
+    streamId = readHuyaSignedInt(_is, 3, false);
   }
 
   @override
@@ -386,7 +392,7 @@ class HYItemEffectBizData extends TarsStruct {
 
   @override
   void readFrom(TarsInputStream _is) {
-    type = _is.read(type, 0, false);
+    type = readHuyaSignedInt(_is, 0, false);
     data = _is.readBytes(1, false);
   }
 
@@ -421,12 +427,13 @@ class HYLiveRoomLargeConsumptionEffectNotice extends TarsStruct {
 
   @override
   void readFrom(TarsInputStream _is) {
-    presenterUid = _is.read(presenterUid, 0, false);
-    effectId = _is.read(effectId, 1, false);
-    customerUid = _is.read(customerUid, 2, false);
+    // 仅检查关键字段确实存在；有效范围由 handler 校验，不以默认值虚构特效。
+    presenterUid = readHuyaSignedInt(_is, 0, true);
+    effectId = readHuyaSignedInt(_is, 1, true);
+    customerUid = readHuyaSignedInt(_is, 2, true);
     customerNick = _is.read(customerNick, 3, false);
     customerAvatar = _is.read(customerAvatar, 4, false);
-    recipientUid = _is.read(recipientUid, 5, false);
+    recipientUid = readHuyaSignedInt(_is, 5, false);
     recipientNick = _is.read(recipientNick, 6, false);
     recipientAvatar = _is.read(recipientAvatar, 7, false);
     itemName = _is.read(itemName, 8, false);

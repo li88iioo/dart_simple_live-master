@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -47,6 +46,9 @@ const Set<String> _huyaInteractionTextKeys = <String>{
   'interactiontext',
 };
 
+/// 展示样式与调度价值分开：动画资源本身不等于真实高价交易。
+enum HuyaGiftQueuePriority { normal, effect, valuable }
+
 @immutable
 class HuyaGiftDanmakuEvent {
   const HuyaGiftDanmakuEvent({
@@ -73,6 +75,11 @@ class HuyaGiftDanmakuEvent {
     this.isBigEffect = false,
     this.effectShowType = 0,
     this.effectStreamDuration = 0,
+    this.isGuardian = false,
+    this.guardianLevel = 0,
+    this.actionLabel = '送出',
+    this.countKnown = true,
+    this.isUpdate = false,
   });
 
   factory HuyaGiftDanmakuEvent.fromMessage(
@@ -83,6 +90,8 @@ class HuyaGiftDanmakuEvent {
         ? Map<String, dynamic>.from(message.data as Map)
         : const <String, dynamic>{};
     final kind = _asText(data['kind']);
+    final eventId = _asText(data['eventId']);
+    final replacesEventId = _asText(data['replacesEventId']);
     final messageId = _asInt(data['messageId']);
     final giftId = _asInt(data['giftId']);
     final senderUid = _asInt(data['senderUid']);
@@ -91,7 +100,7 @@ class HuyaGiftDanmakuEvent {
     final pcResourceUrl = _asText(data['pcResourceUrl']);
     final catalogImageUrls = _asStringList(data['giftImageUrls']);
     final catalogEffectUrls = _asStringList(data['giftEffectUrls']);
-    final effectParamUrls = _collectHttpUrls(data['effectParams']);
+    final effectParamUrls = _collectGiftEffectUrls(data['effectParams']);
 
     final giftImageUrls = collectHuyaGiftImageUrls(<String>[
       ...catalogImageUrls,
@@ -133,15 +142,25 @@ class HuyaGiftDanmakuEvent {
     final serverPayTotalYb = _asNullableInt(data['payTotal']);
     final isEffectNotice = kind == 'giftEffectNotice';
     final effectId = _asInt(data['effectId']);
+    final isGuardian = kind == 'guardianOpen';
+    final isActivityEffect = kind == 'giftActivityEffect';
+    final guardianDays = _asInt(data['guardianOpenDays']);
 
     return HuyaGiftDanmakuEvent(
-      id: messageId > 0
-          ? kind.isEmpty
-              ? 'message-$messageId'
-              : '$kind-message-$messageId'
-          : isEffectNotice && effectId > 0
-              ? 'effect-$effectId-$senderUid-$sequence'
-              : 'gift-$giftId-$senderUid-$sequence',
+      isUpdate: replacesEventId.isNotEmpty,
+      id: replacesEventId.isNotEmpty
+          ? replacesEventId
+          : eventId.isNotEmpty
+              ? eventId
+              : kind == 'giftDrawing' && messageId > 0
+                  ? 'drawing-$messageId-$giftId'
+                  : messageId > 0
+                      ? kind.isEmpty
+                          ? 'message-$messageId'
+                          : '$kind-message-$messageId'
+                      : isEffectNotice && effectId > 0
+                          ? 'effect-$effectId-$senderUid-$sequence'
+                          : 'gift-$giftId-$senderUid-$sequence',
       sender: _asText(data['sender'], fallback: message.userName),
       senderIcon: _asText(data['senderIcon']),
       giftName: giftName,
@@ -154,13 +173,26 @@ class HuyaGiftDanmakuEvent {
       effectWebResourceUrl: webResourceUrl,
       effectPcResourceUrl: pcResourceUrl,
       effectResourceAttr: _asText(data['resourceAttr']),
-      interactionText: interactionText,
+      interactionText:
+          isGuardian && guardianDays > 0 ? '$guardianDays天' : interactionText,
+      isGuardian: isGuardian,
+      guardianLevel: _asInt(data['guardianLevel']),
+      countKnown:
+          !isGuardian && !isActivityEffect && data['countKnown'] != false,
+      actionLabel: isGuardian
+          ? (_asInt(data['guardianLastLevel']) == 0 ? '开通' : '更新')
+          : isActivityEffect
+              ? '触发'
+              : '送出',
       giftImageUrl: giftImageUrls.firstOrNull,
       giftEffectImageUrl: giftEffectImageUrls.firstOrNull,
       giftImageUrls: giftImageUrls,
       giftEffectImageUrls: giftEffectImageUrls,
       giftAnimationUrls: giftAnimationUrls,
-      nominalTotalYb: _maxNullableInt(catalogNominalTotalYb, serverPayTotalYb),
+      nominalTotalYb: _maxNullableInt(
+        _maxNullableInt(catalogNominalTotalYb, serverPayTotalYb),
+        _asNullableInt(data['resourceNominalTotalYb']),
+      ),
       isBigEffect: isEffectNotice || _asBool(data['isBigEffect']),
       effectShowType: _asInt(effectInfo['showType']),
       effectStreamDuration: _asInt(effectInfo['streamDuration']),
@@ -168,11 +200,25 @@ class HuyaGiftDanmakuEvent {
   }
 
   final String id;
+
+  /// 只修订已接收的同 ID 事件；目标已退场时不能作为新礼物重播。
+  final bool isUpdate;
   final String sender;
   final String senderIcon;
   final String giftName;
   final int giftId;
   final int count;
+  final bool countKnown;
+  final bool isGuardian;
+  final int guardianLevel;
+  final String actionLabel;
+
+  String get description => '$actionLabel $giftName';
+  String? get quantityLabel => isGuardian
+      ? 'V$guardianLevel'
+      : countKnown
+          ? '×$count'
+          : null;
   final int effectType;
   final int colorEffectType;
   final int comboScore;
@@ -214,14 +260,84 @@ class HuyaGiftDanmakuEvent {
 
   bool get isHighlight {
     final nominalValue = nominalTotalYb;
-    return isBigEffect ||
+    return isGuardian ||
+        isBigEffect ||
         (effectShowType & 2) != 0 ||
         giftAnimationUrls.isNotEmpty ||
         (nominalValue != null && nominalValue >= huyaGiftHighlightThresholdYb);
   }
 
+  HuyaGiftQueuePriority get queuePriority {
+    if (isGuardian ||
+        (nominalTotalYb != null &&
+            nominalTotalYb! >= huyaGiftHighlightThresholdYb)) {
+      return HuyaGiftQueuePriority.valuable;
+    }
+    return isHighlight
+        ? HuyaGiftQueuePriority.effect
+        : HuyaGiftQueuePriority.normal;
+  }
+
+  /// 交易回填以新身份、名称和数量为准；缺失视觉资源不覆盖已有特效。
+  /// 不累计 count，也不增长候选列表；计时由 controller 保留原截止时刻。
+  HuyaGiftDanmakuEvent _updatedWith(HuyaGiftDanmakuEvent update) {
+    return HuyaGiftDanmakuEvent(
+      id: id,
+      isUpdate: true,
+      sender: update.sender,
+      senderIcon: update.senderIcon,
+      giftName: update.giftName,
+      giftId: update.giftId,
+      count: update.count,
+      countKnown: update.countKnown,
+      isGuardian: isGuardian || update.isGuardian,
+      guardianLevel:
+          update.guardianLevel > 0 ? update.guardianLevel : guardianLevel,
+      actionLabel:
+          isGuardian && !update.isGuardian ? actionLabel : update.actionLabel,
+      effectType: update.effectType != 0 ? update.effectType : effectType,
+      colorEffectType: update.colorEffectType != 0
+          ? update.colorEffectType
+          : colorEffectType,
+      comboScore: update.comboScore,
+      effectResourceUrl: update.effectResourceUrl.isNotEmpty
+          ? update.effectResourceUrl
+          : effectResourceUrl,
+      effectWebResourceUrl: update.effectWebResourceUrl.isNotEmpty
+          ? update.effectWebResourceUrl
+          : effectWebResourceUrl,
+      effectPcResourceUrl: update.effectPcResourceUrl.isNotEmpty
+          ? update.effectPcResourceUrl
+          : effectPcResourceUrl,
+      effectResourceAttr: update.effectResourceAttr.isNotEmpty
+          ? update.effectResourceAttr
+          : effectResourceAttr,
+      interactionText: update.interactionText.isNotEmpty
+          ? update.interactionText
+          : interactionText,
+      giftImageUrl: update.giftImageUrl ?? giftImageUrl,
+      giftEffectImageUrl: update.giftEffectImageUrl ?? giftEffectImageUrl,
+      giftImageUrls: update.giftImageUrls.isNotEmpty
+          ? update.giftImageUrls
+          : giftImageUrls,
+      giftEffectImageUrls: update.giftEffectImageUrls.isNotEmpty
+          ? update.giftEffectImageUrls
+          : giftEffectImageUrls,
+      giftAnimationUrls: update.giftAnimationUrls.isNotEmpty
+          ? update.giftAnimationUrls
+          : giftAnimationUrls,
+      nominalTotalYb: _maxNullableInt(nominalTotalYb, update.nominalTotalYb),
+      isBigEffect: isBigEffect || update.isBigEffect,
+      effectShowType: effectShowType | update.effectShowType,
+      effectStreamDuration: update.effectStreamDuration > 0
+          ? update.effectStreamDuration
+          : effectStreamDuration,
+    );
+  }
+
   String get semanticsLabel {
-    final base = '$sender 送出 $giftName，共 $count 个';
+    final base =
+        '$sender $description${isGuardian ? '，V$guardianLevel' : countKnown ? '，共 $count 个' : ''}';
     return interactionText.isEmpty ? base : '$base，$interactionText';
   }
 }
@@ -230,56 +346,98 @@ class HuyaGiftDanmakuQueue {
   HuyaGiftDanmakuQueue({this.maxPending = 3}) : assert(maxPending > 0);
 
   final int maxPending;
-  final ListQueue<HuyaGiftDanmakuEvent> _pending = ListQueue();
+  // 队列很小，列表便于交易回填按原位置替换，不移动同级事件。
+  final List<HuyaGiftDanmakuEvent> _pending = [];
+  static const int _maxPriorityStreak = 2;
+  int _priorityStreak = 0;
 
   HuyaGiftDanmakuEvent? active;
 
   int get pendingCount => _pending.length;
 
+  /// 仅新 active 返回 true。原位更新返回 false，不能重启展示计时器。
   bool enqueue(HuyaGiftDanmakuEvent event) {
+    final pendingIndex = _pending.indexWhere((item) => item.id == event.id);
+    if (event.isUpdate) {
+      if (active?.id == event.id) {
+        active = active!._updatedWith(event);
+      } else if (pendingIndex >= 0) {
+        _pending[pendingIndex] = _pending[pendingIndex]._updatedWith(event);
+      }
+      // 未接收、已淘汰或已退场的特效不因交易回填重新入队。
+      return false;
+    }
+    // 去重必须早于容量处理，重复通知既不累加数量也不淘汰独立礼物。
+    if (active?.id == event.id || pendingIndex >= 0) return false;
     if (active == null) {
       active = event;
+      _recordPresentation(event);
       return true;
     }
 
-    if (event.isHighlight) {
-      if (_pending.length >= maxPending && !_removeOldestNormal()) {
-        _pending.removeLast();
-      }
-      // 高价值礼物优先成为下一条，但不打断当前正在展示的礼物。
-      _pending.addFirst(event);
+    if (_pending.length >= maxPending &&
+        !_removeOldestLowerPriority(event.queuePriority)) {
       return false;
     }
-
-    if (_pending.length >= maxPending && !_removeOldestNormal()) {
-      // 队列已全部是高价值礼物时，普通礼物不再覆盖它们。
-      return false;
-    }
-    _pending.addLast(event);
+    _pending.add(event);
     return false;
   }
 
-  bool _removeOldestNormal() {
-    HuyaGiftDanmakuEvent? candidate;
-    for (final event in _pending) {
-      if (!event.isHighlight) {
-        candidate = event;
-        break;
+  bool _removeOldestLowerPriority(HuyaGiftQueuePriority incomingPriority) {
+    var candidate = -1;
+    for (var i = 0; i < _pending.length; i++) {
+      final priority = _pending[i].queuePriority.index;
+      if (priority < incomingPriority.index &&
+          (candidate < 0 ||
+              priority < _pending[candidate].queuePriority.index)) {
+        candidate = i;
       }
     }
-    if (candidate == null) return false;
-    _pending.remove(candidate);
+    // 只淘汰最早的最低级项；同级保留先到者，不用洪峰挤掉已等待事件。
+    if (candidate < 0) return false;
+    _pending.removeAt(candidate);
     return true;
   }
 
   HuyaGiftDanmakuEvent? advance() {
-    active = _pending.isEmpty ? null : _pending.removeFirst();
+    if (_pending.isEmpty) {
+      active = null;
+      _priorityStreak = 0;
+      return null;
+    }
+    final fairSlot = _priorityStreak >= _maxPriorityStreak;
+    var selected = 0;
+    for (var i = 1; i < _pending.length; i++) {
+      final priority = _pending[i].queuePriority.index;
+      final selectedPriority = _pending[selected].queuePriority.index;
+      if (fairSlot
+          ? priority < selectedPriority
+          : priority > selectedPriority) {
+        selected = i;
+      }
+    }
+    active = _pending.removeAt(selected);
+    if (fairSlot) {
+      // 公平轮次服务最早的最低级项（不只 normal），之后恢复最高级优先。
+      _priorityStreak = 0;
+    } else {
+      _recordPresentation(active!);
+    }
     return active;
+  }
+
+  void _recordPresentation(HuyaGiftDanmakuEvent event) {
+    if (event.queuePriority == HuyaGiftQueuePriority.normal) {
+      _priorityStreak = 0;
+    } else if (_priorityStreak < _maxPriorityStreak) {
+      _priorityStreak++;
+    }
   }
 
   void clear() {
     active = null;
     _pending.clear();
+    _priorityStreak = 0;
   }
 }
 
@@ -386,13 +544,12 @@ List<String> collectHuyaGiftAnimationUrls(Iterable<String> candidates) {
   return _uniqueUrls(
     candidates.where((candidate) {
       final normalized = _normalizeHuyaGiftUrl(candidate);
-      if (normalized == null || isSafeHuyaGiftImageUrl(normalized)) {
-        return false;
-      }
+      if (normalized == null) return false;
       final uri = Uri.tryParse(normalized);
+      // 未知格式不等于动画，避免 HTML/文本等资源误触发高价值高亮。
       return uri != null &&
-          uri.hasAuthority &&
-          (uri.scheme == 'http' || uri.scheme == 'https');
+          uri.host.isNotEmpty &&
+          _huyaGiftNonImageExtensions.any(uri.path.toLowerCase().endsWith);
     }),
   );
 }
@@ -474,6 +631,41 @@ String _cleanInteractionText(String value, {required String giftName}) {
     return '';
   }
   return text;
+}
+
+// 只从明确的礼物资源键提取 URL，避免把头像/用户文案中的链接当作礼物图片。
+List<String> _collectGiftEffectUrls(dynamic value, {int depth = 0}) {
+  if (depth > 4) return const [];
+  if (value is String && value.length <= 65536) {
+    try {
+      return _collectGiftEffectUrls(jsonDecode(value), depth: depth + 1);
+    } catch (_) {
+      return const [];
+    }
+  }
+  if (value is! Map) return const [];
+  const resourceKeys = {
+    'iconurl',
+    'giftimageurl',
+    'giftimageurls',
+    'gifticonurl',
+    'propsurl',
+    'resourceurl',
+    'webresourceurl',
+    'pcresourceurl',
+    'animationurl',
+    'effecturl',
+    'gifteffecturls',
+    'giftanimationurls',
+  };
+  const containerKeys = {'resources', 'effect', 'effects', 'gift', 'assets'};
+  return _uniqueUrls([
+    for (final entry in value.entries)
+      if (resourceKeys.contains(entry.key.toString().toLowerCase()))
+        ..._collectHttpUrls(entry.value, depth: depth + 1)
+      else if (containerKeys.contains(entry.key.toString().toLowerCase()))
+        ..._collectGiftEffectUrls(entry.value, depth: depth + 1),
+  ]);
 }
 
 List<String> _collectHttpUrls(dynamic value, {int depth = 0}) {

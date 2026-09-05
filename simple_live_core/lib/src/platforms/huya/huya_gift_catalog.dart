@@ -179,7 +179,7 @@ class HYPropsIdentity extends TarsStruct {
   void displayAsString(StringBuffer sb, int level) {}
 }
 
-List<String> _uniqueResourceCandidates(Iterable<String> candidates) {
+List<String> normalizeHuyaGiftResourceCandidates(Iterable<String> candidates) {
   final values = <String>[];
   final seen = <String>{};
   for (final candidate in candidates) {
@@ -244,7 +244,8 @@ class HYPropsItem extends TarsStruct {
   String commonBannerResourceEx = "";
   String ownBannerResourceEx = "";
 
-  List<String> get imageCandidates => _uniqueResourceCandidates(<String>[
+  List<String> get imageCandidates =>
+      normalizeHuyaGiftResourceCandidates(<String>[
         for (final identity in identities) ...<String>[
           identity.propsPic108,
           identity.propsPic24,
@@ -256,7 +257,8 @@ class HYPropsItem extends TarsStruct {
         ipadLogo,
       ]);
 
-  List<String> get effectCandidates => _uniqueResourceCandidates(<String>[
+  List<String> get effectCandidates =>
+      normalizeHuyaGiftResourceCandidates(<String>[
         for (final identity in identities) ...<String>[
           identity.propsChatBannerResource,
           identity.propsBannerResource,

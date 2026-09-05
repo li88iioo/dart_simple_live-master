@@ -363,6 +363,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     _roomGeneration.next();
     _playbackGeneration.next();
     _invalidateDanmakuWork();
+    _clearHuyaGiftEffects();
     superChats.clear();
     _superChatTimer?.cancel();
     _superChatTimer = null;
@@ -534,9 +535,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
           message,
           sequence: ++_huyaGiftEffectSequence,
         );
+        final previousActive = _huyaGiftQueue.active;
         final shouldPresentImmediately = _huyaGiftQueue.enqueue(event);
         if (shouldPresentImmediately) {
           _presentActiveHuyaGift();
+        } else if (!identical(previousActive, _huyaGiftQueue.active)) {
+          // 特效后的真实交易只回填同一张卡片，不重置原来的退场时刻。
+          activeHuyaGiftEffect.value = _huyaGiftQueue.active;
         }
         return;
     }
