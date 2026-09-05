@@ -9,6 +9,8 @@ CRUSH.md
 build/
 dev-tool.ps1
 *.py
+# Independent fixture encoder is maintained test source, not a scratch script.
+!simple_live_core/test/platforms/huya/fixtures/generate_gift_fixtures.py
 simple_live_app/iconfont.yaml
 
 # Keystore files
